@@ -1128,6 +1128,37 @@ def apply_corrections(frame: pd.DataFrame, params: Params) -> tuple[pd.DataFrame
 # made of and the component it sits in. Written as a function rather than a
 # lookup so that the reasoning is visible: a shaft and a lamination stack are
 # both steel and they do not change for the same reasons.
+# ⚠️ THE MOTOR "TYPES" ARE DRIVE CONFIGURATIONS, NOT SINGLE MACHINES.
+#
+# Established 2026-09-18, from Matthias's rule and confirmed in the data: in a
+# two-motor car one machine is a permanent-magnet machine, used all the time,
+# and the second is an induction machine added when more power and torque are
+# wanted. It is the Tesla layout and the dataset carries it directly --
+# `IMandPMElectricMotors` is a CONFIGURATION, not a machine.
+#
+# The magnets prove it. Per vehicle, segment D:
+#
+#     PMElectricMotors        2.78 kg of magnet over an average of 1.44
+#                             motors  ->  1.93 kg per machine
+#     IMandPMElectricMotors   2.06 kg of magnet in a TWO-motor car
+#
+# A two-motor car carries LESS magnet than the single-motor category, and
+# almost exactly one magnet rotor's worth: 2.06 / 1.93 = 1.07. Segments JC and
+# JD give 0.86 and 0.89. So in every case the induction machine of the pair
+# contributes no magnet at all, which is the whole point of pairing them.
+#
+# WHAT THIS MEANS FOR THE TRAJECTORY. A shift towards all-wheel drive does not
+# multiply the magnet demand -- it adds iron and copper and leaves the magnet
+# where it was. Any scenario that moves the fleet between these categories has
+# to move whole configurations, not scale one machine.
+MOTOR_CONFIGURATION = {
+    'PMElectricMotors': 'one or more permanent-magnet machines',
+    'EESMElectricMotors': 'externally excited, no magnet',
+    'IMandPMElectricMotors': 'one permanent-magnet machine plus one induction '
+                             'machine, the second added for power and torque',
+}
+
+
 def material_class(row) -> str:
     """The trajectory class of one row: lamination, copper, magnet, steel, aluminium."""
     sub = str(row.get('componentKeyLevel3') or '')

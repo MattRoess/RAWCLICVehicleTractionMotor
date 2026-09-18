@@ -321,6 +321,31 @@ Power per motor rises in some segments (C 115 → 140 kW) and not others (JC fla
 at ~150 kW). Where it rises against flat torque, the machine is turning faster
 — which is the mechanism Drexler names for the shrinking lamination stack.
 
+### The categories are drive configurations, not single machines
+
+**Matthias 2026-09-18:** in a two-motor car one machine is a permanent-magnet
+machine, used all the time, and the second is an induction machine added when
+more power and torque are wanted.
+
+**The magnets confirm it.** Per vehicle:
+
+| segment | Ø motors | PM category, magnet | per machine | **IM+PM category, magnet** |
+|---|---|---|---|---|
+| D | 1.44 | 2.78 kg | 1.93 kg | **2.06 kg** |
+| JC | 1.41 | 2.56 kg | 1.82 kg | **1.57 kg** |
+| JD | 1.55 | 3.13 kg | 2.03 kg | **1.80 kg** |
+
+A **two-motor** car carries **less** magnet than the single-motor category, and
+almost exactly one magnet rotor's worth — 1.07, 0.86, 0.89 of a machine. The
+induction half of the pair contributes no magnet at all, which is the point of
+pairing them.
+
+**So `IMandPMElectricMotors` is a configuration, not a machine**, and the other
+two are as well. This matters for the trajectory: a shift towards all-wheel
+drive does **not** multiply magnet demand — it adds iron and copper and leaves
+the magnet where it was. Any scenario moving the fleet between these categories
+has to move whole configurations rather than scale one machine.
+
 ### Open: the topologies may be too similar to each other
 
 At 500 Nm the consolidated dataset gives, for the rotor lamination stack,
