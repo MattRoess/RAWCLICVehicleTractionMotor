@@ -867,6 +867,25 @@ CORRECTIONS = [
              '§1), so this is not cosmetic.',
         applied=True),
 
+    # -------------------------------------------------------------- C6
+    dict(
+        id='C6-torque-from-fleet',
+        defect='Four segments state a torque_max the fleet does not contain: '
+               'C at 1100 Nm against 600, A at 345 against 212, JB at 740 '
+               'against 584, B at 395 against 360.',
+        evidence='EV Database snapshot 2026-09, 1438 models -- the same '
+                 'database the consolidated description names as its torque '
+                 'source. Several minima match it to the kilogram (A 113, '
+                 'D 290, F 345, JC 220), so the lower bound was read from it '
+                 'and the upper bound was not.',
+        action='torque_min/max := the observed range of that segment',
+        note='Vehicle TOTAL torque, established rather than assumed: the '
+             'total matches the stated minima in 4 of 11 segments against 1 '
+             'of 11 for per-motor, and JC matches exactly at both ends. The '
+             'masses agree -- Zenodo equals Drexler per machine times the '
+             'average motor count per segment, median ratio 1.08.',
+        applied=True),
+
     # -------------------------------------------------------------- C5
     dict(
         id='C5-conductive-bars-material',
@@ -907,6 +926,7 @@ def apply_corrections(frame: pd.DataFrame, params: Params) -> tuple[pd.DataFrame
     out['flag'] = ''
     out['flagReason'] = ''
     out['flagSource'] = ''
+    out['torqueSource'] = 'as published'
     log: list[dict] = []
 
     def note(correction_id: str, changed: int, what: str) -> None:
@@ -1055,6 +1075,38 @@ def apply_corrections(frame: pd.DataFrame, params: Params) -> tuple[pd.DataFrame
     note('C4-components-without-c-p', len(new_rows),
          'c-p rows added for housing, gearBox, coolingSystem; housing material '
          'set to aluminium')
+
+    # ---- C6 -------------------------------------------------------------
+    # THE TORQUE RANGES COME FROM THE FLEET, not from the workbook.
+    #
+    # The consolidated description says torques per model are taken from the
+    # EV Database. A later snapshot of that database (1438 models) says four
+    # segments state a maximum the fleet does not contain -- C at 1100 Nm
+    # against 600, A at 345 against 212 -- while several minima match to the
+    # kilogram. So the lower bound was read from the database and the upper
+    # bound was not.
+    #
+    # ⚠️ VEHICLE TOTAL, NOT PER MOTOR, and that is not a choice made here.
+    # Testing both against the stated minima: the vehicle total matches in 4
+    # of 11 segments, per-motor in 1 of 11, and segment JC matches the total
+    # exactly at both ends, 220-770 Nm. The workbook is describing the whole
+    # drive of a vehicle -- all its motors together -- and the masses agree:
+    # Zenodo's stator lamination equals Drexler's per-machine mean times the
+    # average number of motors in that segment, median ratio 1.08 across ten
+    # segments. That is what the 1.5x offset always was.
+    ranges = load_fleet_ranges(params)
+    changed = 0
+    for segment, (low, high, count) in ranges.items():
+        mask = out.productKeyLevel3 == segment
+        if not mask.any():
+            continue
+        out.loc[mask, 'torque_min'] = low
+        out.loc[mask, 'torque_max'] = high
+        out.loc[mask, 'torqueSource'] = f'EV Database, {count} models'
+        changed += int(mask.sum())
+    note('C6-torque-from-fleet', changed,
+         'torque_min/max replaced with the observed range per segment '
+         f'({len(ranges)} segments)')
 
     # ---- C5 -------------------------------------------------------------
     mask = ((out.parameterCode == data.material_of_component) &
@@ -1608,7 +1660,7 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
                     textcoords='offset points', fontsize=7.8, color=colour)
 
         axis.set_xlabel('Drehmoment an der Motorwelle [Nm]')
-        axis.set_ylabel('Motormasse ohne Getriebe [kg]')
+        axis.set_ylabel('Masse ohne Getriebe [kg]')
         axis.set_ylim(0, None)
         axis.grid(alpha=0.22, lw=0.6)
         axis.legend(fontsize=8.5, framealpha=0.95, loc='upper left')
