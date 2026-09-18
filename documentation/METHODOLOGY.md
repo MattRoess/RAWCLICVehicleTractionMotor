@@ -77,9 +77,12 @@ central complaint:
 > Part II **2018**. 20 materials per motor, computed rather than tabulated,
 > scaling over 20–200 kW and 48–477 Nm, validated to within 21%.
 >
-> **Not used. Nine years old.** It predates 800 V in volume, hairpin winding at
-> scale, heavy-rare-earth reduction as a design driver, and both new
-> architectures here. Recorded so that it is not proposed again.
+> **Its masses are not used. Nine years old.** They predate 800 V in volume,
+> hairpin winding at scale, heavy-rare-earth reduction as a design driver, and
+> both new architectures here. Recorded so that they are not proposed again.
+>
+> **Its material compositions are admissible** -- see §2.1. Composition-only,
+> at matched architecture.
 
 Its **method** is still the right idea — scale a bill of material by torque
 rather than quote one reference motor — and §2.2 below takes that idea without
@@ -107,12 +110,21 @@ what copper and lamination steel are, and **not** a valid source for the
 material split of a 2030 hairpin stator, because the winding technology
 changed underneath it.
 
-**What this reinstates.** The 2017/2018 Chalmers inventory and the 2020 Munro
-benchmark were rejected on 2026-09-18 for being too old. That rejection stands
-for their **masses**, which is what it was about. Their **element compositions
-of the materials** do not expire and can be used, cited by source and year.
-Same for GREET's material definitions. **Flagging this rather than acting on
-it silently -- say if the rejection was meant to cover the whole source.**
+**Settled 2026-09-18.** The 2017/2018 Chalmers inventory, the 2020 Munro
+benchmark and GREET are **composition-only sources**:
+
+> **Use them for `m-c` and `e-m`. Never for `c-p`.**
+
+Not a preference to weigh against other considerations -- a hard gate. No mass,
+no kg, no "motor weighs", no component total may be taken from any of the
+three, in any scenario, at any year, however convenient the gap it would fill.
+What may be taken is what a material is made of, cited by source and year.
+
+If a mass is missing and one of these three is the only place it appears, that
+mass stays missing and gets **derived** per §2.2 instead. A derived mass with a
+stated method is admissible; a borrowed 2018 mass is not, because it silently
+fixes a 2018 design into a 2030 or 2060 row and the whole time dimension of
+this model is the claim that the design does not stay fixed.
 
 ### 2.2 Recent bills of material do not exist in public, and that is the finding
 
@@ -125,7 +137,7 @@ Where the current numbers actually are:
 | | holds it | usable |
 |---|---|---|
 | **Munro Live** (YouTube) | **current teardowns, free** — see 2.3 | **yes**, and it is the best recent source found |
-| **A2MAC1**; Munro's written reports | current teardowns, component by component | commercial. Munro's 10-motor comparison is **2020** and paid — old by the same test that rejected Chalmers |
+| **A2MAC1**; Munro's written reports | current teardowns, component by component | commercial. Munro's 10-motor comparison is **2020** and paid — **composition only**, never masses, §2.1 |
 | **IDTechEx** | architecture shares and trends | commercial; already cited by the review |
 | **ORNL / DOE VTO** | public teardowns, real weighed parts | the motor teardowns are older; recent work is inverters and drive units |
 | **OEM technical papers** | one machine each, well documented | scattered, and rarely a full BOM |
@@ -324,7 +336,8 @@ Tb raise. If a different quantity was meant, this section changes.
 |---|---|
 | 2026-09-18 | Zenodo is tier 1 and the only measured source; everything else is tier 2 and labelled |
 | 2026-09-18 | The 2017/2018 Chalmers inventory is REJECTED as too old — its method is kept, its numbers are not |
-| 2026-09-18 | **Age is judged per layer**: `c-p` masses must be recent, `m-c` and `e-m` compositions do not expire — so rejected sources stay usable for element composition, at matched architecture |
+| 2026-09-18 | **Age is judged per layer**: `c-p` masses must be recent, `m-c` and `e-m` compositions do not expire |
+| 2026-09-18 | Chalmers, Munro 2020 and GREET are **composition-only sources** — `m-c` and `e-m` yes, `c-p` never. A missing mass is derived, not borrowed |
 | 2026-09-18 | No recent public motor-only BOM exists in writing; bills of material are DERIVED from current ratings and current material shares |
 | 2026-09-18 | Munro REJECTED — the videos do not weigh parts, the written benchmark is 2020 and paid |
 | 2026-09-18 | Free and current sources only: GREET first, then JRC, IEA, steel-supplier datasheets and OEM statements |
