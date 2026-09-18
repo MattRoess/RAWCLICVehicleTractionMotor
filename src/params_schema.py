@@ -464,6 +464,27 @@ class ScenarioParams:
     #  dominate and do not scale with current -- and for the stator winding
     #  itself the halving argument is the one that applies.
     #
+    #  ⚠️ AND THE SAMPLE CONTRADICTS IT, for the winding. Drexler's 46
+    #  machines include 800 V cars -- Hyundai Ioniq and Kia EV6 are in the
+    #  sample, and he notes that Hyundai and BYD switch between 400 V and
+    #  800 V charging through the motor's own windings. Measured stator
+    #  copper across that sample is 2.04-9.54 kg, and the minimum belongs
+    #  to the Toyota bZ4X, a 400 V car. If an 800 V winding needed 11% of
+    #  the copper, the 800 V machines would sit far below the 400 V ones
+    #  and the sample minimum would be well under 1 kg. It is not.
+    #
+    #  Applied as set, at 0.86 kg of stator copper for an 800 V C-segment
+    #  machine. Recorded here so the number is arguable rather than
+    #  invisible.
+    #
+    #  ⚠️ AND HIGHER VOLTAGE ALSO COSTS MASS, which this model does not yet
+    #  carry. Drexler: PEEK is emerging as the primary wire insulation for
+    #  800 V+, and the stripped, welded X-pin wire ends need encapsulation
+    #  because air and creepage distances are short. Insulation, potting
+    #  and insulated bearings all grow with voltage. Only the saving is
+    #  modelled here; the penalty is missing, so 800 V looks better than it
+    #  is by an amount nobody has quantified.
+    #
     #  Kept as set, and flagged here rather than quietly softened. The
     #  square is applied in code, so changing the diameter ratio changes
     #  the mass correctly.

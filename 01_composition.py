@@ -185,10 +185,21 @@ def main() -> int:
     os.makedirs(params.output.figures_dir, exist_ok=True)
     out = os.path.join(params.output.data_dir, STEM)
 
+    # The CURRENT composition, in all three voltage classes. The corrected
+    # frame itself has no voltage dimension -- the source describes the 400 V
+    # fleet -- so the current dataset is the trajectory at the base year,
+    # which is where the variants are built.
+    current_year = series[series.productionYear == params.scenario.base_year]
+
     corrected.to_csv(f'{out}.csv', index=False)
+    current_year.to_csv(f'{out}_current.csv', index=False)
     series.to_csv(f'{out}_trajectory.csv', index=False)
     with pd.ExcelWriter(f'{out}.xlsx', engine='openpyxl') as writer:
-        corrected.to_excel(writer, sheet_name='composition_current', index=False)
+        current_year.to_excel(writer, sheet_name='composition_current',
+                              index=False)
+        for volts in params.scenario.conductor_diameter:
+            block = current_year[current_year.voltageClass == volts]
+            block.to_excel(writer, sheet_name=f'current_{volts}V', index=False)
         after.to_excel(writer, sheet_name='findings', index=False)
         log.to_excel(writer, sheet_name='corrections', index=False)
         declared().to_excel(writer, sheet_name='corrections_declared', index=False)
@@ -206,7 +217,10 @@ def main() -> int:
                         os.path.join(figures, '03_critical_materials.png')),
     ]
 
-    print(f'  {out}.xlsx              {len(corrected)} rows, 5 sheets')
+    print(f'  {out}.xlsx              {len(current_year)} rows, '
+          f'{5 + len(params.scenario.conductor_diameter)} sheets')
+    print(f'  {out}_current.csv       {len(current_year)} rows, '
+          f'{len(params.scenario.conductor_diameter)} voltage classes')
     print(f'  {out}_trajectory.csv    {len(series)} rows')
     print(f'  {audit_path}')
     for path in made:
