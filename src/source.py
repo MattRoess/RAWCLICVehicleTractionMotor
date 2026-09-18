@@ -301,6 +301,44 @@ def audit(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
             'is a modelling decision and none of it is measured',
             value=years[0]))
 
+    # ------------------------------------------------------------------ 7b
+    # A VALUE WITH NO UNCERTAINTY, in a dataset where every value is a
+    # regression with a confidence interval. p025 == p975 means the number did
+    # not come out of the fit: it was entered. This check needs no external
+    # source -- the dataset contradicts itself -- and it is the strongest kind
+    # of finding there is.
+    filled = frame.dropna(subset=['meanValue'])
+    flat = filled[filled.p025 == filled.p975]
+    if not flat.empty:
+        for where, rows in flat.groupby(
+                [flat.componentKeyLevel1.fillna('(all)'),
+                 flat.componentKeyLevel2.fillna('(none)'),
+                 flat.componentKeyLevel3.fillna('(none)')]):
+            findings.append(_finding(
+                'zero-interval', 'blocking', where[0], '(several)',
+                f'{where[1]} / {where[2]}',
+                f'{len(rows)} rows have p025 == p975, the only ones among '
+                f'{len(filled)} filled rows in this dataset. Every value here '
+                f'is a torque regression with a confidence interval, so a '
+                f'value without one was entered rather than fitted',
+                rows=len(rows)))
+
+    # ------------------------------------------------------------------ 8
+    # ROWS THIS PROJECT HAS MARKED UNRELIABLE. Only present once corrections
+    # have run. Reported by the audit so that a marked value cannot travel
+    # quietly: a flag nobody reads is decoration.
+    if 'reliability' in frame.columns:
+        marked = frame[frame.reliability.fillna('') == 'unreliable']
+        for (flag, motor), rows in marked.groupby(
+                [marked.flag.fillna('?'), marked.componentKeyLevel1.fillna('(all)')]):
+            findings.append(_finding(
+                'marked-unreliable', 'note', motor, '(several)',
+                f'{rows.componentKeyLevel2.iloc[0]} / '
+                f'{rows.componentKeyLevel3.fillna("(none)").iloc[0]}',
+                f'{len(rows)} rows kept as published and marked {flag!r}: '
+                f'{rows.flagReason.iloc[0][:160]}...',
+                rows=len(rows)))
+
     columns = ['check', 'severity', 'motor', 'segment', 'where', 'detail',
                'stator_total', 'lamination', 'windings', 'materials_sum',
                'component_total', 'ratio', 'meanValue', 'value', 'rows',

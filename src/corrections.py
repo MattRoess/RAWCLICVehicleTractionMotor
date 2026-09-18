@@ -71,18 +71,23 @@ CORRECTIONS = [
         id='C3-eesm-rotor-winding-mass',
         defect='The same rows carry 7.53-10.88 kg, and the value is pinned at '
                'exactly 10.880000 across 8 of 11 segments.',
-        evidence=f'{DREXLER}, Fig. 30b: average total rotor copper mass 3.68 kg, '
-                 f'max 4.45 kg (BMW i7 xDrive60 Individual), min 2.86 kg (BMW '
-                 f'iX1 xDrive30 Premium), at 5% insulation. The consolidated '
-                 f'values are 2-3x the measured maximum.',
-        action='NONE -- reported only',
-        note='⚠️ NOT APPLIED. The material correction (C2) is unambiguous; the '
-             'mass is a second question. Replacing a segment-resolved series '
-             'with one benchmark average is a modelling decision, not a '
-             'correction, and the 1.5x segment-to-motor offset established in '
-             '02_verify_stator.py means the two are not directly comparable '
-             'either. Flagged for a decision.',
-        applied=False),
+        evidence=f'Two independent lines. (1) {DREXLER}, Fig. 30b: average '
+                 f'total rotor copper mass 3.68 kg, max 4.45 kg (BMW i7 '
+                 f'xDrive60 Individual), min 2.86 kg (BMW iX1 xDrive30 '
+                 f'Premium), at 5% insulation -- the consolidated values are '
+                 f'2-3x the measured maximum. (2) THE DATASET ITSELF: these '
+                 f'are the only 10 of 192 filled rows with p025 == p975 and '
+                 f'STD ~1e-15. Everything else is a regression with a '
+                 f'confidence interval; these were entered, not fitted.',
+        action='FLAG ONLY -- the value is kept and marked unreliable',
+        note='Decided 2026-09-18: do not replace the mass, mark it. Replacing '
+             'a segment-resolved series with one benchmark average is a '
+             'modelling decision, not a correction, and the 1.5x '
+             'segment-to-motor offset established in 02_verify_stator.py '
+             'means the two are not directly comparable either. So the number '
+             'stays exactly as the source has it, and every row carrying it '
+             'says it cannot be relied on.',
+        applied=True),
 
     # -------------------------------------------------------------- C4
     dict(
@@ -135,6 +140,12 @@ def apply(frame: pd.DataFrame, params) -> tuple[pd.DataFrame, pd.DataFrame]:
     data = params.data
     out = frame.copy()
     out['corrected'] = ''
+    # This project's own quality columns. NOT the house schema's dq* columns:
+    # those are empty here and their 1-4 scale has no documented direction.
+    out['reliability'] = ''
+    out['flag'] = ''
+    out['flagReason'] = ''
+    out['flagSource'] = ''
     log: list[dict] = []
 
     def note(correction_id: str, changed: int, what: str) -> None:
@@ -215,8 +226,40 @@ def apply(frame: pd.DataFrame, params) -> tuple[pd.DataFrame, pd.DataFrame]:
     note('C2-eesm-rotor-winding-material', int(mask.sum()),
          'rare earth -> copper on the EESM rotor winding')
 
-    # ---- C3: declared, not applied --------------------------------------
-    note('C3-eesm-rotor-winding-mass', 0, 'NOT APPLIED -- flagged for decision')
+    # ---- C3: the value is kept and marked ------------------------------
+    # ⚠️ MARKED, NOT CHANGED. The mass stays exactly as the source has it.
+    # What changes is that the row now says it cannot be relied on, so that
+    # nothing downstream can use it without having been told.
+    #
+    # WHY NOT THE dq COLUMNS. The house schema has dqValidity, dqAccuracy,
+    # dqIntegrity, dqTimeliness and dqCompleteness on a 1-4 scale. In this
+    # workbook all five are EMPTY in all 264 rows, and the Guideline sheet
+    # gives each one's question without saying which end of 1-4 is good.
+    # Writing a number into a scale whose direction is undocumented would put
+    # a value into a dataset that gets handed on, meaning the opposite of what
+    # was intended half the time. Flagged in this project's own columns
+    # instead, whose meaning is defined here and nowhere else.
+    mask = ((out.parameterCode == data.material_of_component) &
+            (out.componentKeyLevel2 == 'rotor') &
+            (out.componentKeyLevel3 == 'windings') &
+            (out.componentKeyLevel1 == 'EESMElectricMotors'))
+    out.loc[mask, 'reliability'] = 'unreliable'
+    out.loc[mask, 'flag'] = 'C3-mass-unreliable'
+    out.loc[mask, 'flagReason'] = (
+        'Value kept as published and NOT corrected. Drexler 2025 Fig. 30b '
+        'measures total rotor copper at 3.68 kg (2.86-4.45 kg over 9 EESM '
+        'rotors); these rows carry 7.53-10.88 kg, two to three times the '
+        'measured maximum. The value is also pinned at exactly 10.880000 '
+        'across 8 of 11 segments, which segments differing in size by more '
+        'than a factor of two should not be -- a filled-down cell. And the '
+        'dataset says so itself: these are the ONLY 10 rows out of 192 filled '
+        'rows whose p025 equals p975, STD ~1e-15. Every other value in the '
+        'workbook is a torque regression carrying a confidence interval, so '
+        'these did not come out of the fit -- they were entered. Treat as an '
+        'upper bound of unknown quality, not as a measurement.')
+    out.loc[mask, 'flagSource'] = DREXLER
+    note('C3-eesm-rotor-winding-mass', int(mask.sum()),
+         'mass KEPT unchanged and marked unreliable')
 
     # ---- C4 -------------------------------------------------------------
     new_rows = []

@@ -223,7 +223,46 @@ It matters, and here is by how much (PM, segment C):
 varies by a factor of 1.9, so the assumption is worth arguing with — and it is
 one line in `src/params_schema.py`.
 
-### C3 is deliberately not applied
+### C3 — the mass is kept and marked, not replaced
+
+**Decided 2026-09-18: do not replace the mass, mark it.** The number stays
+exactly as the source has it — verified: `meanValue`, `p025` and `p975` are
+byte-identical to the workbook for all 11 rows. What changed is that every row
+now says it cannot be relied on.
+
+| column | |
+|---|---|
+| `reliability` | `unreliable` |
+| `flag` | `C3-mass-unreliable` |
+| `flagReason` | the full argument, in the row |
+| `flagSource` | Drexler 2025 |
+
+**Not in the `dq*` columns.** The house schema has five of them on a 1–4 scale.
+In this workbook **all five are empty in all 264 rows**, and the Guideline sheet
+gives each one's question without saying which end of 1–4 is good. Writing a
+number into a scale whose direction is undocumented would put a value into a
+dataset that gets handed on, meaning the opposite of what was intended half the
+time. Flagged in this project's own columns instead, whose meaning is defined
+here and nowhere else.
+
+**The flag does not close the finding.** `zero-interval` remains **blocking**
+after correction, and that is correct: marking a defect is not fixing it. The
+audit still reports it, and it is the one blocking finding left.
+
+### Two independent lines of evidence against this mass
+
+1. **Drexler Fig. 30b** — total rotor copper **3.68 kg** (2.86–4.45 over 9 EESM
+   rotors). These rows carry **7.53–10.88 kg**, two to three times the measured
+   maximum.
+2. **The dataset contradicts itself.** These are the **only 10 of 192 filled
+   rows whose `p025` equals `p975`**, with `STD ≈ 1e-15`. Every other value in
+   the workbook is a torque regression carrying a confidence interval. **These
+   did not come out of the fit — they were entered.**
+
+The second line needs no external source at all, which makes it the stronger
+one, and it is now a standing audit check (`zero-interval`).
+
+### C3 in short
 
 Drexler measures total rotor copper at **3.68 kg** (max 4.45, min 2.86, Fig.
 30b). The consolidated rows carry **7.53–10.88 kg** — two to three times the
@@ -267,6 +306,9 @@ which is why the correction layer and the benchmark had to meet.
 | 2026-09-18 | Within-motor correlation assumed **0.9** and NOT measured; width varies 1.9× between ρ=0 and ρ=1 |
 | 2026-09-18 | Drexler is data, not ground truth — its min/max are sample extremes of 46 machines, used as a range check and never as a limit |
 | 2026-09-18 | The source workbook is never edited; corrections are declared in code and written to `data/` |
-| 2026-09-18 | **C3 (EESM rotor winding mass) NOT applied and OPEN** — measured 3.68 kg against 7.53–10.88 kg stated, but substituting a benchmark average is a modelling decision |
+| 2026-09-18 | **C3: the mass is KEPT and MARKED unreliable**, not replaced — substituting a benchmark average is a modelling decision |
+| 2026-09-18 | Marked in this project's own `reliability`/`flag` columns, NOT the house `dq*` scale, whose 1–4 direction is undocumented and whose cells are all empty |
+| 2026-09-18 | A flag does not close a finding — `zero-interval` stays blocking after marking, because marking a defect is not fixing it |
+| 2026-09-18 | New standing check `zero-interval`: 10 of 192 filled rows have p025 == p975, so they were entered rather than fitted — the dataset contradicting itself, needing no external source |
 | 2026-09-18 | Blocking 1 **RESOLVED** against Drexler 2025: the `c-p` row is the stator; the lamination cell holds the stator total. Motor mass unaffected, material split wrong |
 | 2026-09-18 | The 1.5x offset between segment averages and motor averages is sampling, not a defect — the same ratio appears on stator and rotor independently |

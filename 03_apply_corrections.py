@@ -81,6 +81,17 @@ def main() -> int:
     if left:
         print(f'  blocking remaining: {", ".join(left)}')
 
+    if 'reliability' in corrected.columns:
+        marked = corrected[corrected.reliability == 'unreliable']
+        if not marked.empty:
+            print(f'\nMarked unreliable, kept as published: {len(marked)} rows')
+            for flag, rows in marked.groupby('flag'):
+                values = rows.meanValue.dropna()
+                print(f'  {flag}: {len(rows)} rows'
+                      + (f', {values.min():.2f}-{values.max():.2f} kg'
+                         if len(values) else ''))
+                print(f'    {rows.flagReason.iloc[0]}')
+
     os.makedirs(params.output.data_dir, exist_ok=True)
     path = os.path.join(params.output.data_dir, CORRECTED_FILE)
     corrected.to_csv(path, index=False)
