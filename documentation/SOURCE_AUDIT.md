@@ -1,8 +1,10 @@
 # Source audit — the Zenodo consolidated dataset
 
 `RAWCLIC_BEV_motor_consolidated_data_V1.xlsx`, 264 rows, 43 columns.
-Produced by `01_audit_source.py`; the full finding list is
-`data/01_source_audit.csv`.
+Produced by `01_composition.py`, which is the project's single stage: it
+reads, audits, verifies, corrects and writes in one run. The full finding list,
+before and after correction, is `data/composition_audit.csv`; the dataset
+itself is `data/TractionMotor_composition.xlsx`.
 
 **Run first, before anything consumes this workbook.** It is the only measured
 source the project has (`METHODOLOGY.md` §2, tier 1), so every mass this
@@ -63,7 +65,7 @@ Under (a) nothing changes in total motor mass. Under (b) the stator — the
 heaviest component in the machine — is understated across the entire fleet,
 and with it every copper and electrical-steel total the model will produce.
 
-### ✅ RESOLVED 2026-09-18 — reading (a), by `02_verify_stator.py`
+### ✅ RESOLVED 2026-09-18 — reading (a), by `01_composition.py`
 
 Settled against **Drexler et al. (2025)**, which is not a second opinion but
 the same data before it was fitted: every consolidated mass is a regression
@@ -171,7 +173,7 @@ which way it is read.
 
 **The audit never corrects.** `src/source.py` reports. Corrections are declared
 in `src/corrections.py`, each with the evidence that establishes it, and applied
-by `03_apply_corrections.py`.
+by `01_composition.py`.
 
 **The source workbook is never edited.** It is a received deliverable under
 `documentation/`. The corrected dataset is written to `data/`, where it is
@@ -184,7 +186,7 @@ over.
 
 | | correction | rows | evidence |
 |---|---|---|---|
-| **C1** | lamination := `stator − windings`, **per draw** | 24 | `02_verify_stator.py` vs Drexler Fig. 11c |
+| **C1** | lamination := `stator − windings`, **per draw** | 24 | `01_composition.py` vs Drexler Fig. 11c |
 | **C2** | EESM rotor winding: rare earth → **copper** | 11 | Drexler: "sliding brushes and **copper sleeves**", 9 EESM rotors |
 | **C3** | EESM rotor winding **mass** | 0 | **NOT APPLIED — flagged** |
 | **C4** | `c-p` rows added for housing, gearBox, coolingSystem; housing material → aluminium | 78 | Consolidated description §3; Drexler §5.1.1 "cast aluminium" |
@@ -272,7 +274,7 @@ measured maximum — and the value is pinned at exactly `10.880000` across 8 of
 So the mass is almost certainly wrong as well. It is **still not corrected**,
 because replacing a segment-resolved series with one benchmark average is a
 modelling decision rather than a correction, and the **1.5× segment-to-motor
-offset** established in `02_verify_stator.py` means the two are not directly
+offset** established in `01_composition.py` means the two are not directly
 comparable. `applied=False` is a real state in `src/corrections.py`: reported,
 carried in the output, changing nothing until somebody decides.
 
