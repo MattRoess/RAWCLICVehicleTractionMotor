@@ -2088,10 +2088,22 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
                       (frame.parameterCode == params.data.material_of_component)]
         frame = frame.dropna(subset=['meanValue', 'torque_min']).copy()
         frame['torque'] = (frame.torque_min + frame.torque_max) / 2.0
+        # ⚠️ THE ERROR BARS ARE VERTICAL, AND THEY ARE THE STATED ONES.
+        # An earlier version drew the segment's p05-p95 TORQUE spread as a
+        # horizontal bar, which makes no sense and Matthias said so: a segment
+        # is a diagonal cloud of vehicles along the line, because the heavier
+        # ones are also the higher-torque ones. A horizontal bar asserts that
+        # the mass stays put across that torque span, which is the opposite of
+        # what the whole figure says.
+        #
+        # What a point legitimately carries is the uncertainty the source
+        # states for that mass -- p025 to p975, per draw across the components
+        # that make up the material. That is vertical, and it is real.
         for klass, part in frame.groupby('materialClass'):
-            observed[klass] = (part.groupby('torque')['meanValue'].sum(),
-                               part.groupby('torque')[['torque_min',
-                                                       'torque_max']].first())
+            observed[klass] = (
+                part.groupby('torque')['meanValue'].sum(),
+                part.groupby('torque')['p025'].sum(),
+                part.groupby('torque')['p975'].sum())
 
     classes = [k for k in MATERIAL_COLOUR if k in set(block.materialClass)]
     figure, axes = plt.subplots(1, len(classes), figsize=(3.5 * len(classes), 5.2))
@@ -2115,13 +2127,12 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
                       alpha=fade, label=str(year))
 
         if klass in observed:
-            values, bounds = observed[klass]
-            low = bounds.torque_min.reindex(values.index).values
-            top = bounds.torque_max.reindex(values.index).values
+            values, low, high_v = observed[klass]
             axis.errorbar(values.index, values.values,
-                          xerr=[values.index - low, top - values.index],
+                          yerr=[np.maximum(0, values.values - low.values),
+                                np.maximum(0, high_v.values - values.values)],
                           fmt='o', ms=5.5, mfc='white', mec='#111111', mew=1.3,
-                          ecolor='#777777', elinewidth=0.9, capsize=2,
+                          ecolor='#111111', elinewidth=1.0, capsize=2.5,
                           ls='none', zorder=9)
 
         axis.axvspan(high, float(block.torque_nm.max()), color='#000000',
@@ -2144,7 +2155,8 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
         f'{MOTOR_LABEL.get(motor, motor)}, {params.scenario.base_voltage} V.  '
         'Kein Segment.\n'
         'Band: Unsicherheit DES FITS (Bootstrap der Segmente), nur 2020.  '
-        'Punkte: Segmentwerte mit ihrer Drehmomentspanne', fontsize=11)
+        'Punkte: Segmentwerte mit der angegebenen Massenunsicherheit',
+        fontsize=11)
     figure.tight_layout(rect=(0, 0.07, 1, 1))
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
