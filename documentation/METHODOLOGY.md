@@ -187,9 +187,41 @@ Two consequences:
    from inside the consolidated file because both readings are internally
    consistent.
 
-**Still to obtain.** Springer requires authentication and MDPI returned 403 on
-the automated fetch. Declared in the registry with a blank file, which is the
-honest state: known, not yet in hand.
+**In hand since 2026-09-18**, open access, at
+`documentation/TractionMotor/s00502-025-01331-3.pdf`. Its published statistics
+are transcribed with citations in `src/drexler.py` — in code, not in a data
+file, because `data/` is not in version control and a number this consequential
+should be diffable and attributable.
+
+**It covers model years 2018–2023**, so that is its registry window. Note what
+this does to the year arithmetic: at `'2010-2070, 5'` the modelled years are
+2010, 2015, 2020, …, and Drexler's window contains **none of them except
+through 2020**. Measured years therefore go *down* to **1 of 13**, which is the
+honest count and not a regression.
+
+### 4.1 has its number now
+
+The paper compares **2018–2021 against 2022–2023** — its only time resolution —
+and the reduction is measured, not assumed:
+
+| component | 2018–2021 | 2022–2023 | change | implied annual |
+|---|---|---|---|---|
+| stator sheet lamination stack | 18.77 kg | 14.81 kg | **−21.1%** | −7.6%/yr |
+| stator winding, round wire | 7.82 kg | 5.15 kg | **−34.1%** | −13.0%/yr |
+| stator winding, all topologies | 5.90 kg | 4.51 kg | **−23.6%** | −8.6%/yr |
+
+Mechanisms the authors give: reduced active length and outer diameter for the
+lamination stack; copper price and deliberate material-efficiency effort for
+the winding. The flat-wire/hairpin mechanism is separable and quantified —
+**round wire 6.23 kg against flat wire 4.39 kg, 42% more copper for the same
+job**.
+
+⚠️ **THESE RATES CANNOT BE EXTRAPOLATED TO 2070.** −7.6%/yr compounded for
+45 years leaves 3% of the stator, which is not a motor. The annual figures are
+derived in `src/drexler.py:trends()` from two period averages three years
+apart, and they describe a step change in winding technology and stator sizing
+that happened once. §4.1 needs a saturating curve whose *early* slope matches
+this and whose limit is a physical one, not a continued exponential.
 
 ### 2.2.1 Adding a source is a declaration, not a code change
 

@@ -70,7 +70,7 @@ TIERS = ('tier1', 'tier2')
 # The readers that exist. A source declares which shape its file is in, so
 # that adding a source is a declaration and not a code change -- until the
 # shape is genuinely new, which is what `READERS` makes visible.
-READERS = ('house', 'bom')
+READERS = ('house', 'bom', 'drexler')
 
 
 @dataclass
@@ -146,12 +146,15 @@ class DataParams:
         # consolidated file is supposed to mean, which is the one blocking
         # finding the audit cannot resolve from inside the data.
         'drexler2025': dict(
-            file='', sheet='',
-            role='data', tier='tier2', vintage=2025, published=2025,
-            # A 2025 benchmark. One vintage too, until the file is in hand
-            # and shows otherwise.
-            covers=(2025, 2025), horizon='historic',
-            reads='bom',
+            file='documentation/TractionMotor/s00502-025-01331-3.pdf',
+            sheet='',
+            role='data', tier='tier2', vintage=2023, published=2025,
+            # 31 VEHICLES OF MODEL YEARS 2018-2023, so the window is the model
+            # years the sample actually contains -- not the year of
+            # publication. The paper compares 2018-2021 against 2022-2023 and
+            # that two-period split is the only time resolution it has.
+            covers=(2018, 2023), horizon='historic',
+            reads='drexler',
             citation='Drexler, D., Kampker, A., Born, H., et al. Advances in '
                      'electric motors: a review and benchmarking of product '
                      'design and manufacturing technologies. Elektrotech. '

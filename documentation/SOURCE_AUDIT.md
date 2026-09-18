@@ -63,11 +63,31 @@ Under (a) nothing changes in total motor mass. Under (b) the stator — the
 heaviest component in the machine — is understated across the entire fleet,
 and with it every copper and electrical-steel total the model will produce.
 
-**⚠️ NOT DECIDED. This is the one question that has to be answered before any
-stage consumes the workbook,** because it cannot be resolved from inside the
-data: both readings are internally consistent. It needs the Zenodo description
-PDF, or a mass check against an admissible source per §2.1 — a stator of
-31.7 kg versus 39.4 kg at 225–1100 Nm is a difference a cross-check can see.
+### ✅ RESOLVED 2026-09-18 — reading (a), by `02_verify_stator.py`
+
+Settled against **Drexler et al. (2025)**, which is not a second opinion but
+the same data before it was fitted: every consolidated mass is a regression
+through Drexler's benchmark points. Its stator lamination stacks are measured
+on **46 machines, 7.20–35.52 kg, mean 16.62 kg** (Fig. 11c).
+
+| reading | implied lamination | outside the measured range |
+|---|---|---|
+| **(a)** `c-p` is the stator | 10.75–39.54 kg, mean 25.11 | **1 of 24** |
+| (b) `c-p` is the lamination | 13.97–52.72 kg, mean 33.31 | **10 of 24** |
+
+Reading (b) would have the regression producing ten values its own source
+never contained, up to 52.72 kg against a measured maximum of 35.52 kg.
+
+> **The `c-p` row is the stator.** The lamination cell was filled with the
+> stator total, and the true lamination is `stator − windings`.
+> **Total motor mass is unaffected; the material split is wrong.**
+
+**The remaining offset is sampling, not a second defect.** Consolidated
+segment averages run heavier than Drexler's motor averages — **1.51×** for the
+stator lamination and **1.50×** for the rotor lamination. Two independent
+components giving the same ratio is what a sampling difference looks like:
+segments including large vans, against 48 individual motors including small
+ones. A further defect would not land on both at the same factor.
 
 ## Blocking 2 — rare earth in the motor built to avoid it
 
@@ -161,4 +181,5 @@ by the stage that builds the composition — not hidden in a loader.
 |---|---|
 | 2026-09-18 | The audit runs first and is kept as code, so a re-issued workbook is tested against the same list rather than against memory |
 | 2026-09-18 | The audit reports and never corrects; corrections are decisions, recorded here |
-| 2026-09-18 | Blocking 1 (stator counted twice) is **OPEN** — it cannot be resolved from inside the data and blocks every consuming stage |
+| 2026-09-18 | Blocking 1 **RESOLVED** against Drexler 2025: the `c-p` row is the stator; the lamination cell holds the stator total. Motor mass unaffected, material split wrong |
+| 2026-09-18 | The 1.5x offset between segment averages and motor averages is sampling, not a defect — the same ratio appears on stator and rotor independently |

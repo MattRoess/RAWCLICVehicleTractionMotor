@@ -99,6 +99,13 @@ def _read(params: Params, name: str, entry: dict) -> pd.DataFrame:
                 f'{path} is missing the columns {missing}. `reads="house"` means '
                 f'the RAWCLIC house schema; a workbook without these is a '
                 f'different shape and needs its own reader.')
+    elif reader == 'drexler':
+        # Published statistics, transcribed and cited in src/drexler.py. The
+        # paper is a PDF of prose and figures, not a table anyone can read
+        # mechanically, so the transcription is the reader -- and it is in
+        # code so that every value is diffable and attributable.
+        from src.drexler import components
+        frame = components()
     elif reader == 'bom':
         # A published benchmark, in whatever shape its authors chose. There is
         # no such file in hand yet, so there is nothing to guess at: the reader
