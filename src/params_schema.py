@@ -384,13 +384,97 @@ class RunParams:
     #  torque and a year and gets a composition -- with no segment in the
     #  way and no need to decide which segment a future vehicle is in.
     #
-    #  '100-1500, 100' reads as: 100 Nm to 1500 Nm, every 100 Nm.
-    #  The fleet spans 113 to 2000 Nm of vehicle total torque, so this
-    #  grid covers the bulk of it without extrapolating into the handful
-    #  of extreme vehicles at the top.
+    #  '100-1200, 100' reads as: 100 Nm to 1200 Nm, every 100 Nm.
+    #
+    #  ⚠️ WHY IT STOPS AT 1200 AND NOT 1500. Measured on the fleet's 1402
+    #  models of vehicle total torque:
+    #
+    #      median            420 Nm
+    #      p90               850 Nm
+    #      p95               967 Nm
+    #      p99              1340 Nm
+    #      maximum          2000 Nm
+    #
+    #      above  800 Nm    168 models   12.0%
+    #      above 1000 Nm     52 models    3.7%
+    #      above 1200 Nm     17 models    1.2%
+    #      above 1500 Nm      6 models    0.4%
+    #
+    #  Above 1200 Nm there are seventeen models, and they are AMG GT,
+    #  Lucid Air Sapphire, Porsche Cayenne Turbo -- performance cars whose
+    #  motors are not what the rest of the fleet is made of, and whose
+    #  numbers would be carried by a grid point with almost nothing behind
+    #  it. 1200 Nm covers 98.8% of the models and stays below the highest
+    #  point any segment fit actually rests on, which is 1350 Nm.
+    #
+    #  Going lower is defensible too: 1000 Nm covers 96.3%. Going higher
+    #  is not, because past 1350 Nm every value is extrapolation with no
+    #  segment behind it.
+    #
+    #  The bottom is 100 Nm and the smallest vehicle in the fleet is
+    #  113 Nm, so the first grid point is just below the fleet rather than
+    #  far outside it.
     #  SAFE TO CHANGE: yes.
     # ******************************************************************
-    torque_grid: str = '100-1500, 100'
+    torque_grid: str = '100-1200, 100'
+
+    # ******************************************************************
+    #  THE NEWER MACHINES: WHAT THEY ARE MADE OF.
+    #
+    #  ⚠️ FOR MATTHIAS TO FILL. Their makers publish a whole-machine mass
+    #  and say nothing about what is inside it, so the composition cannot
+    #  be read anywhere and will not be invented here.
+    #
+    #  WHAT IS ALREADY KNOWN, from the data sheets in src/composition.py,
+    #  and does NOT need to be entered:
+    #      axial flux          YASA P400 C, 28.2 kg at 370 Nm, with housing
+    #      dual rotor radial   DeepDrive RM 1500, 32 kg at 1500 Nm
+    #  The anchor gives the TOTAL. What is missing is how that total splits.
+    #
+    #  HOW TO FILL IT. `shares` are fractions of the machine mass and must
+    #  add to 1.0. Use the same five classes the radial machines use, so
+    #  that everything downstream keeps working:
+    #      lamination  electrical steel, the stator and rotor stacks
+    #      copper      windings
+    #      magnet      NdFeB
+    #      steel       shaft, structure, gearbox if the anchor includes one
+    #      aluminium   housing and cooling
+    #
+    #  A WORKED STARTING POINT, NOT A DEFAULT. DeepDrive states its dual
+    #  rotor uses 80% less iron and 50% less magnet material than a
+    #  conventional machine, without naming the baseline. Applied to the
+    #  radial PMSM split at the same torque that would give roughly
+    #  lamination 0.12, magnet 0.03, with copper, steel and aluminium
+    #  taking up the rest -- but "than what" is unstated, so this is an
+    #  illustration of the arithmetic and not a recommendation.
+    #
+    #  `torque_slope_from` says where the torque dependence comes from
+    #  while there is only one machine to fit: 'radial' borrows the mean
+    #  radial slope and scales it to the anchor, which is an assumption
+    #  and is labelled as one wherever it is drawn. A number here instead
+    #  means kg per Nm, entered directly.
+    #
+    #  LEAVING `shares` EMPTY IS NOT AN ERROR. That motor is then reported
+    #  with a total mass and no composition, which is the honest state
+    #  today, and the composition tables simply do not contain it.
+    #  SAFE TO CHANGE: yes -- this block is meant to be edited.
+    # ******************************************************************
+    spec_composition: dict[str, dict] = field(default_factory=lambda: {
+        'axialFluxPMElectricMotors': dict(
+            anchor='YASA P400 C',
+            shares={},                      # <-- TO FILL
+            torque_slope_from='radial',
+            note='Axial flux, oil cooled stator, 800 V. Yokeless segmented '
+                 'armature: much less iron than a radial machine of the same '
+                 'torque, and the magnets sit on two discs.'),
+        'dualRotorRadialPMElectricMotors': dict(
+            anchor='DeepDrive RM 1500',
+            shares={},                      # <-- TO FILL
+            torque_slope_from='radial',
+            note='Dual rotor, stator between inner and outer rotor. The maker '
+                 'states 80% less iron and 50% less magnet material, baseline '
+                 'unnamed. High torque at low speed, little or no reduction.'),
+    })
 
     # THE VEHICLE SEGMENTS, as `productKeyLevel3` spells them. A-F are the
     # passenger segments and JB-JF the light commercial ones. Empty means all
@@ -806,6 +890,29 @@ class Params:
             issues.append(f'monte_carlo.within_motor_correlation is '
                           f'{self.monte_carlo.within_motor_correlation}; it is a '
                           f'correlation and has to lie in [0, 1]')
+
+        for name, entry in self.run.spec_composition.items():
+            where = f'run.spec_composition[{name!r}]'
+            if name not in self.run.motors:
+                issues.append(f'{where} names a motor that is not in '
+                              f'run.motors')
+            shares = entry.get('shares') or {}
+            if shares:
+                total = sum(shares.values())
+                if abs(total - 1.0) > 1e-6:
+                    issues.append(f'{where}["shares"] adds to {total:.4f}; the '
+                                  f'shares are fractions of one machine and '
+                                  f'have to add to 1.0')
+                unknown = set(shares) - {'lamination', 'copper', 'magnet',
+                                         'steel', 'aluminium'}
+                if unknown:
+                    issues.append(f'{where}["shares"] has {sorted(unknown)}, '
+                                  f'which are not material classes this '
+                                  f'project knows')
+            slope = entry.get('torque_slope_from')
+            if slope != 'radial' and not isinstance(slope, (int, float)):
+                issues.append(f'{where}["torque_slope_from"] is {slope!r}; it '
+                              f"has to be 'radial' or a number in kg per Nm")
 
         if not _GRID.fullmatch((self.run.torque_grid or '').strip()):
             issues.append(f'run.torque_grid is {self.run.torque_grid!r}. It '

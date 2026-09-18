@@ -2005,6 +2005,97 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
                                              or torque > torques.max()),
                     })
 
+    result = pd.DataFrame(rows)
+    spec = _spec_by_torque(result, params)
+    if not spec.empty:
+        result = pd.concat([result, spec], ignore_index=True)
+    return result
+
+
+def _spec_by_torque(radial: pd.DataFrame, params: Params) -> pd.DataFrame:
+    """
+    The newer machines on the same grid, from a data sheet and a split.
+
+    THE DATA SHEET GIVES THE TOTAL, THE SPLIT COMES FROM `spec_composition`.
+    Nothing is invented: if `shares` is empty the machine is skipped and the
+    composition tables simply do not contain it, which is the honest state
+    while no source says what is inside it.
+
+    ⚠️ THE TORQUE DEPENDENCE IS BORROWED, and shaped rather than sloped. One
+    machine cannot carry a slope. With `torque_slope_from='radial'` the radial
+    total curve is SCALED THROUGH the anchor point -- m(T) = m_radial(T) x
+    anchor / m_radial(T_anchor) -- rather than given the radial slope with a
+    new intercept, which produced a negative mass below 130 Nm when it was
+    tried on the topology figure. Scaling keeps the shape and cannot go
+    negative.
+    """
+    from src.params_schema import years_wanted
+
+    configured = {name: entry for name, entry in params.run.spec_composition.items()
+                  if entry.get('shares')}
+    if not configured:
+        return pd.DataFrame()
+
+    grid = np.array(years_wanted(params.run.torque_grid), dtype=float)
+    years = years_wanted(params.run.years)
+    sheets = machines().set_index('name')
+
+    # The radial total, as the shape to borrow.
+    radial_total = radial[(radial.productionYear == params.scenario.base_year) &
+                          (radial.voltageClass == params.scenario.base_voltage) &
+                          (radial.componentKeyLevel1 == 'PMElectricMotors')]
+    shape = radial_total.groupby('torque_nm')['meanValue'].sum()
+
+    rows = []
+    for motor, entry in configured.items():
+        anchor_name = entry.get('anchor')
+        if anchor_name not in sheets.index:
+            continue
+        anchor = sheets.loc[anchor_name]
+        anchor_torque = float(anchor.torque_shaft)
+        anchor_mass = float(anchor.mass_kg)
+
+        slope = entry.get('torque_slope_from')
+        if slope == 'radial':
+            at_anchor = float(np.interp(anchor_torque, shape.index, shape.values))
+            totals = np.interp(grid, shape.index, shape.values) * \
+                (anchor_mass / at_anchor) if at_anchor else np.zeros_like(grid)
+        else:
+            totals = float(slope) * grid
+
+        for klass, share in entry['shares'].items():
+            for volts, copper_factor in params.scenario.copper_mass.items():
+                voltage_scale = copper_factor if klass == 'copper' else 1.0
+                for year in years:
+                    scale = factor(year, klass, params) * voltage_scale * share
+                    for index, torque in enumerate(grid):
+                        rows.append({
+                            'componentKeyLevel1': motor,
+                            'componentKeyLevel2': '(not resolved)',
+                            'componentKeyLevel3': None,
+                            'materialKeyLevel1': None,
+                            'materialClass': klass,
+                            'torque_nm': torque,
+                            'productionYear': year,
+                            'voltageClass': volts,
+                            'meanValue': totals[index] * scale,
+                            # A data sheet states one number and no interval,
+                            # so there is none to report. Not zero uncertainty
+                            # -- unstated uncertainty.
+                            'p025': np.nan, 'p975': np.nan,
+                            'yearBasis': ('measured'
+                                          if params.data.year_is_measured(year)
+                                          else ('backcast'
+                                                if year < params.scenario.base_year
+                                                else 'projected')),
+                            'n_segments': 1,
+                            'torque_low': anchor_torque,
+                            'torque_high': anchor_torque,
+                            'extrapolated': bool(abs(torque - anchor_torque) > 1),
+                            'basis': f'{anchor_name}, {anchor_mass:.1f} kg at '
+                                     f'{anchor_torque:.0f} Nm, split from '
+                                     f'run.spec_composition',
+                        })
     return pd.DataFrame(rows)
 
 
