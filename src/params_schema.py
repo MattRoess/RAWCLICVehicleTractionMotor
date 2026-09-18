@@ -70,7 +70,7 @@ TIERS = ('tier1', 'tier2')
 # The readers that exist. A source declares which shape its file is in, so
 # that adding a source is a declaration and not a code change -- until the
 # shape is genuinely new, which is what `READERS` makes visible.
-READERS = ('house', 'bom', 'drexler')
+READERS = ('house', 'bom', 'drexler', 'spec')
 
 
 @dataclass
@@ -160,6 +160,23 @@ class DataParams:
                      'design and manufacturing technologies. Elektrotech. '
                      'Inftech. 142, 312-345 (2025). '
                      'doi:10.1007/s00502-025-01331-3'),
+
+        # MANUFACTURER DATA SHEETS. Whole-machine mass and torque, for
+        # topologies the consolidated dataset does not contain at all.
+        # ⚠️ NOT A BILL OF MATERIAL -- a data sheet says what a machine
+        # weighs, not what it is made of, so it cannot fill a composition
+        # row. It bounds the sum instead, which is worth having: an axial
+        # flux machine whose WHOLE mass is below a radial machine's active
+        # parts at the same torque is a statement no regression through
+        # radial motors can make.
+        'yasa': dict(
+            file='',            # transcribed in src/composition.py
+            sheet='',
+            role='data', tier='tier2', vintage=2019, published=2019,
+            covers=(2019, 2019), horizon='historic',
+            reads='spec',
+            citation='YASA P400 R Product Sheet, Rev 13, June 2019, ID 22735, '
+                     'yasa.com'),
 
         # VERIFICATION ONLY. Too old to supply a mass, and therefore -- §2.1
         # -- not a data source at any layer. Declared so that a comparison
@@ -811,7 +828,9 @@ def source_status(params: Params) -> str:
     lines = []
     for name, entry in params.data.sources.items():
         path = entry.get('file') or ''
-        if not path:
+        if not path and entry.get('reads') in ('spec', 'drexler'):
+            state = 'transcribed with citations in src/composition.py'
+        elif not path:
             state = 'DECLARED, file not yet in hand'
         elif os.path.isfile(path):
             state = path

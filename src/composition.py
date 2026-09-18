@@ -129,6 +129,49 @@ def trends() -> pd.DataFrame:
     frame['source'] = 'drexler2025'
     return frame
 
+# ====================================================== 1b MACHINE SPECS
+# ======================================================================
+# Manufacturer data sheets: whole-machine mass against torque, for machines
+# the consolidated dataset does not contain.
+#
+# ⚠️ THESE ARE NOT BILLS OF MATERIAL. A data sheet gives what the machine
+# weighs, not what it is made of. They cannot fill a composition row. What
+# they CAN do is bound the sum: no bill of material for this machine may add
+# up to more than its published dry mass, and a topology whose whole machine
+# weighs less than another's active parts is saying something no regression
+# through radial motors can say.
+MACHINES = [
+    dict(name='YASA P400 R', topology='axialFluxPM', maker='YASA (Mercedes-Benz)',
+         mass_kg=24.0, mass_basis='cartridge, dry, no housing',
+         torque_peak=370.0, torque_continuous=200.0,
+         power_peak_kw=160.0, power_continuous_kw=60.0,
+         speed_max_rpm=8000, cooling='oil, stator',
+         voltage='800 V controller, curves also for 400/550/250 V',
+         axial_length_mm=80.4, diameter_mm=305.0,
+         source='YASA P400 R Product Sheet, Rev 13, June 2019, ID 22735',
+         url='yasa.com/media/2021/05/yasa-p400rdatasheet-rev-14.pdf'),
+    dict(name='YASA P400 C', topology='axialFluxPM', maker='YASA (Mercedes-Benz)',
+         mass_kg=28.2, mass_basis='with housing, dry',
+         torque_peak=370.0, torque_continuous=200.0,
+         power_peak_kw=160.0, power_continuous_kw=100.0,
+         speed_max_rpm=8000, cooling='oil, stator',
+         voltage='800 V controller',
+         axial_length_mm=106.7, diameter_mm=305.0,
+         source='YASA P400 R Product Sheet, Rev 13, June 2019, ID 22735',
+         url='yasa.com/media/2021/05/yasa-p400rdatasheet-rev-14.pdf'),
+]
+
+# ⚠️ WHAT IS NOT HERE AND WHY. The YASA 750R is 790 Nm peak and 200 kW at
+# 98 mm axial length, and its MASS is not published -- the data sheet is
+# released on request only. It is left out rather than guessed. DeepDrive
+# publishes no mass either.
+
+
+def machines() -> pd.DataFrame:
+    """The manufacturer data sheets, one row per machine."""
+    return pd.DataFrame(MACHINES)
+
+
 # ============================================================== 2 DRAWS
 # ======================================================================
 
@@ -280,6 +323,9 @@ def _read(params: Params, name: str, entry: dict) -> pd.DataFrame:
         # mechanically, so the transcription is the reader -- and it is in
         # code so that every value is diffable and attributable.
         frame = components()
+    elif reader == 'spec':
+        # Manufacturer data sheets, transcribed and cited above.
+        frame = machines()
     elif reader == 'bom':
         # A published benchmark, in whatever shape its authors chose. There is
         # no such file in hand yet, so there is nothing to guess at: the reader
@@ -1252,6 +1298,90 @@ def figure_critical(frame: pd.DataFrame, params, out_path: str) -> str:
     figure.suptitle('Kritische Werkstoffe je Motor \u2014 '
                     'rot hinterlegt: von Quellen gedeckt, sonst konstruiert',
                     fontsize=12.5)
+    figure.tight_layout()
+    figure.savefig(out_path, dpi=160)
+    plt.close(figure)
+    return out_path
+
+
+def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
+    """
+    The topologies against each other, at equal torque.
+
+    WHAT IS COMPARED: the machine without its gearbox -- stator, rotor,
+    windings, magnets, shaft and housing. The gearbox is inside the project's
+    boundary but outside this comparison, because the manufacturer data sheet
+    for the axial machine does not include one and comparing a motor with a
+    gearbox against a motor without one would be the whole finding.
+
+    ⚠️ THE AXIAL POINT IS A WHOLE-MACHINE MASS, NOT A BILL OF MATERIAL. YASA
+    publishes what the machine weighs and not what it is made of, so it can be
+    drawn against the radial sum and cannot be broken down beside it. It bounds
+    the sum, which is what makes it worth having: any bill of material for an
+    axial machine has to fit underneath this point.
+    """
+    import matplotlib.pyplot as plt
+
+    base = current[(current.voltageClass == params.scenario.base_voltage) &
+                   (current.productionYear == params.scenario.base_year) &
+                   (current.parameterCode == params.data.material_of_component) &
+                   (current.componentKeyLevel2 != 'gearBox')]
+
+    figure, axis = plt.subplots(figsize=(11, 6.4))
+    colours = {'PMElectricMotors': '#8E44AD', 'EESMElectricMotors': '#2980B9',
+               'IMandPMElectricMotors': '#16A085'}
+
+    for motor in params.run.motors:
+        block = base[base.componentKeyLevel1 == motor].dropna(
+            subset=['meanValue', 'torque_min']).copy()
+        if block.empty:
+            continue
+        block['torque'] = (block.torque_min + block.torque_max) / 2.0
+        totals = block.groupby('torque')['meanValue'].sum()
+        if len(totals) >= 4:
+            slope, intercept = np.polyfit(totals.index, totals.values, 1)
+        else:
+            slope = float(np.mean(totals.values / np.asarray(totals.index, dtype=float)))
+            intercept = 0.0
+        span = np.linspace(0, max(totals.index) * 1.05, 40)
+        colour = colours.get(motor, '#7F8C8D')
+        axis.plot(span, intercept + slope * span, lw=2.4, color=colour,
+                  label=f'{MOTOR_LABEL.get(motor, motor)}  '
+                        f'({intercept + slope * 370:.0f} kg bei 370 Nm)')
+        axis.plot(totals.index, totals.values, 'o', ms=6, mfc='white',
+                  mec=colour, mew=1.5, ls='none')
+
+    # ---- the axial machines, from the manufacturer ----------------------
+    spec = machines()
+    for index, (_, row) in enumerate(spec.iterrows()):
+        axis.plot([row.torque_peak], [row.mass_kg], marker='*', ms=20,
+                  color='#C0392B', mec='white', mew=1.2, ls='none', zorder=8)
+    # One label for the pair: the two machines differ only by their housing,
+    # and two overlapping callouts at the same torque read as one smudge.
+    if len(spec):
+        low, high = spec.mass_kg.min(), spec.mass_kg.max()
+        torque = float(spec.torque_peak.iloc[0])
+        axis.annotate(
+            'YASA P400, Axialfluss\n'
+            f'{low:.0f} kg Kartusche / {high:.1f} kg mit Gehäuse\n'
+            f'{torque:.0f} Nm Spitze, ölgekühlt, 800 V',
+            xy=(torque, high), xytext=(torque + 60, high + 26),
+            fontsize=9, color='#C0392B', va='center',
+            arrowprops=dict(arrowstyle='->', color='#C0392B', lw=1.4))
+    axis.plot([], [], marker='*', ms=15, color='#C0392B', ls='none',
+              label='Axialfluss, YASA Datenblatt (Gesamtmaschine)')
+
+    axis.set_xlabel('Drehmoment [Nm]')
+    axis.set_ylabel('Masse ohne Getriebe [kg]\n'
+                    'Stator, Rotor, Wicklung, Magnete, Welle, Gehäuse')
+    axis.set_xlim(0, None)
+    axis.set_ylim(0, None)
+    axis.grid(alpha=0.22, lw=0.6)
+    axis.legend(fontsize=9, framealpha=0.95, loc='upper left')
+    axis.set_title('Topologien bei gleichem Drehmoment, Stand 2020\n'
+                   'Der Axialflussmotor wiegt als GANZE Maschine weniger als '
+                   'die Aktivteile einer radialen gleichen Drehmoments',
+                   fontsize=12)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
