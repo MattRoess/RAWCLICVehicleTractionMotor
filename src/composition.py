@@ -1941,9 +1941,33 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
                                       correlation=rho)
                     sampled[:, index] += values
 
-        design = np.column_stack([np.ones_like(torques), torques])
-        beta = sampled @ (design @ np.linalg.inv(design.T @ design))
-        fitted = beta[:, 0:1] + beta[:, 1:2] * grid[None, :]     # (draws, grid)
+        # ⚠️ THE BAND IS THE UNCERTAINTY OF THE FIT, not of the values.
+        # Matthias 2026-09-18. Drawing the source's own intervals and
+        # refitting gives a band of about 1%, while the points scatter 8%
+        # around the line -- because that band only carries how uncertain each
+        # value is, and not how badly a straight line in torque describes
+        # them. A user asking "what does a 700 Nm machine weigh" needs the
+        # second one.
+        #
+        # So the segments are BOOTSTRAPPED as well: each draw resamples them
+        # with replacement and refits. A draw that happens to miss the
+        # segments pinning one end gets a visibly different line, which is
+        # exactly the uncertainty a fit on eleven points really has, and it
+        # widens towards the ends of the range where there is least to hold
+        # the line down.
+        design_full = np.column_stack([np.ones_like(torques), torques])
+        picks = rng.integers(0, len(torques), size=(draws, len(torques)))
+        fitted = np.empty((draws, len(grid)))
+        for draw_index in range(draws):
+            columns = picks[draw_index]
+            design = design_full[columns]
+            values = sampled[draw_index, columns]
+            # A resample can land on a single torque; fall back to the mean.
+            if np.ptp(design[:, 1]) == 0:
+                fitted[draw_index] = values.mean()
+                continue
+            beta, *_ = np.linalg.lstsq(design, values, rcond=None)
+            fitted[draw_index] = beta[0] + beta[1] * grid
 
         median = np.median(fitted, axis=0)
         low = np.percentile(fitted, 2.5, axis=0)
@@ -2032,15 +2056,18 @@ def verify_by_torque(grid: pd.DataFrame, corrected: pd.DataFrame,
 def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
                      corrected: pd.DataFrame = None) -> str:
     """
-    Composition against torque, one panel per year, WITH THE FITTED POINTS.
+    Each material against torque, with the fit's own uncertainty.
 
-    ⚠️ NO SEGMENT ANYWHERE in the output. The segments were used to fit the
-    relationship and dropped -- but the points they contributed are drawn on
-    the base year, because a stacked area with no points under it cannot be
-    checked against anything.
+    ⚠️ ONE PANEL PER MATERIAL, NOT A STACK. A stacked area hides exactly what
+    this figure is for: the band belongs to each fitted line, and five bands
+    on top of each other cannot be read. Stacked composition is
+    02_motor_mass.png; this one is about how well each relationship is known.
 
-    Only the base year carries points. The later panels have none, and that is
-    the honest picture: nothing was measured there.
+    THE BAND IS THE FIT'S UNCERTAINTY. Segments are bootstrapped and the line
+    refitted on every draw, so the band widens towards the ends of the range
+    where fewer points hold it down -- 12% at 500 Nm, 46% at 100 Nm. Drawing
+    only the sources' own intervals would have given about 1% everywhere,
+    which would be a statement about the workbook rather than about the fit.
     """
     import matplotlib.pyplot as plt
 
@@ -2051,8 +2078,7 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
     if block.empty:
         raise ValueError(f'no rows for {motor}')
 
-    observed = None
-    spread_low = spread_high = None
+    observed = {}
     if corrected is not None:
         frame = corrected.copy()
         if 'materialClass' not in frame.columns:
@@ -2062,83 +2088,64 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
                       (frame.parameterCode == params.data.material_of_component)]
         frame = frame.dropna(subset=['meanValue', 'torque_min']).copy()
         frame['torque'] = (frame.torque_min + frame.torque_max) / 2.0
-        observed = frame.groupby('torque')['meanValue'].sum()
-        bounds = frame.groupby('torque')[['torque_min', 'torque_max']].first()
-        spread_low = bounds.torque_min.reindex(observed.index).values
-        spread_high = bounds.torque_max.reindex(observed.index).values
+        for klass, part in frame.groupby('materialClass'):
+            observed[klass] = (part.groupby('torque')['meanValue'].sum(),
+                               part.groupby('torque')[['torque_min',
+                                                       'torque_max']].first())
 
-    figure, axes = plt.subplots(1, len(years), figsize=(5.3 * len(years), 5.6),
-                               sharey=True)
+    classes = [k for k in MATERIAL_COLOUR if k in set(block.materialClass)]
+    figure, axes = plt.subplots(1, len(classes), figsize=(3.5 * len(classes), 5.2))
     high = float(block.torque_high.max())
+    fades = [1.0, 0.55, 0.3]
 
-    for axis, year in zip(axes, years):
-        rows = block[block.productionYear == year]
-        pivot = rows.pivot_table(index='torque_nm', columns='materialClass',
-                                 values='meanValue', aggfunc='sum').fillna(0.0)
-        order = [k for k in MATERIAL_COLOUR if k in pivot.columns]
-        axis.stackplot(pivot.index, *[pivot[k] for k in order],
-                       colors=[MATERIAL_COLOUR[k] for k in order],
-                       labels=[MATERIAL_LABEL[k] for k in order], alpha=0.9)
-        axis.axvspan(high, pivot.index.max(), color='#000000', alpha=0.07, lw=0)
-        axis.plot(pivot.index, pivot.sum(axis=1), color='#222222', lw=1.5)
+    for axis, klass in zip(axes, classes):
+        colour = MATERIAL_COLOUR[klass]
+        rows = block[block.materialClass == klass]
 
-        # THE BAND ON THE TOTAL. Drawn on the sum rather than on each layer:
-        # stacking five bands would be unreadable, and the sum is what the
-        # stock-and-flow model multiplies a fleet by.
-        band = rows.pivot_table(index='torque_nm', values=['p025', 'p975'],
+        base = rows[rows.productionYear == params.scenario.base_year]
+        band = base.pivot_table(index='torque_nm', values=['p025', 'p975'],
                                 aggfunc='sum')
-        axis.fill_between(band.index, band.p025, band.p975, color='#111111',
-                          alpha=0.16, lw=0, zorder=7,
-                          label='95% der Ziehungen, Summe' if year ==
-                          params.scenario.base_year else None)
+        axis.fill_between(band.index, band.p025, band.p975, color=colour,
+                          alpha=0.2, lw=0)
 
-        if observed is not None and year == params.scenario.base_year:
-            # Horizontal bars are the segment's own torque spread, p05 to p95
-            # of the vehicles in it -- a segment is not one torque.
-            axis.errorbar(observed.index, observed.values,
-                          xerr=[observed.index - spread_low,
-                                spread_high - observed.index],
-                          fmt='o', ms=8, mfc='white', mec='#111111', mew=1.8,
-                          ecolor='#111111', elinewidth=1.1, capsize=3,
-                          ls='none', zorder=9,
-                          label='Segmentwerte, auf die gefittet wurde')
-            fitted = np.interp(observed.index, pivot.index,
-                               pivot.sum(axis=1).values)
-            error = np.abs(fitted - observed.values).mean() / observed.mean()
-            # ⚠️ TWO DIFFERENT UNCERTAINTIES, and the smaller one is the band.
-            # The grey band is what the DRAWS give: how uncertain the source's
-            # own values are. The scatter of the points around the line is
-            # something else -- how much torque alone fails to explain -- and
-            # it is larger. A reader who takes the band as the total
-            # uncertainty would be reading it too narrowly, so the panel says
-            # both numbers next to each other.
-            band_width = float(((band.p975 - band.p025) /
-                                pivot.sum(axis=1)).mean())
-            axis.annotate(f'{len(observed)} Datenpunkte\n'
-                          f'Streuung um die Kurve  {error:.1%}\n'
-                          f'Ziehungsband           {band_width:.1%}',
-                          xy=(0.035, 0.96), xycoords='axes fraction',
-                          fontsize=8.5, va='top', family='monospace')
+        for fade, year in zip(fades, years):
+            line = rows[rows.productionYear == year].pivot_table(
+                index='torque_nm', values='meanValue', aggfunc='sum')
+            axis.plot(line.index, line.meanValue, lw=2.2, color=colour,
+                      alpha=fade, label=str(year))
 
-        axis.set_title(f'{year}  ({rows.yearBasis.iloc[0]})', fontsize=11.5)
+        if klass in observed:
+            values, bounds = observed[klass]
+            low = bounds.torque_min.reindex(values.index).values
+            top = bounds.torque_max.reindex(values.index).values
+            axis.errorbar(values.index, values.values,
+                          xerr=[values.index - low, top - values.index],
+                          fmt='o', ms=5.5, mfc='white', mec='#111111', mew=1.3,
+                          ecolor='#777777', elinewidth=0.9, capsize=2,
+                          ls='none', zorder=9)
+
+        axis.axvspan(high, float(block.torque_nm.max()), color='#000000',
+                     alpha=0.06, lw=0)
+        width = float(((band.p975 - band.p025) /
+                       base.groupby('torque_nm').meanValue.sum()).reindex(
+                           [500.0]).iloc[0])
+        axis.set_title(f'{MATERIAL_LABEL[klass].split(" (")[0]}\n'
+                       f'\u00b1{width / 2:.0%} bei 500 Nm', fontsize=10)
         axis.set_xlabel('Drehmoment [Nm]')
+        axis.set_ylim(bottom=0)
         axis.grid(alpha=0.22, lw=0.6)
 
     axes[0].set_ylabel('kg je Fahrzeug')
-    axes[-1].annotate('grau: jenseits der\nangepassten Spanne',
-                      xy=(high * 1.02, 8), fontsize=8, color='#666666',
-                      style='italic')
     handles, labels = axes[0].get_legend_handles_labels()
-    figure.legend(handles, labels, loc='lower center', ncol=6, fontsize=8.5,
-                  frameon=False, bbox_to_anchor=(0.5, -0.012))
+    figure.legend(handles, labels, loc='lower center', ncol=3, fontsize=9,
+                  frameon=False, title='Jahr', bbox_to_anchor=(0.5, -0.02))
     figure.suptitle(
-        'Zusammensetzung als Funktion des Drehmoments, je Jahr \u2014 '
+        f'Masse je Werkstoff gegen Drehmoment \u2014 '
         f'{MOTOR_LABEL.get(motor, motor)}, {params.scenario.base_voltage} V.  '
         'Kein Segment.\n'
-        'Punkte nur 2020: danach ist nichts gemessen.  '
-        'Waagrechte Balken: Drehmomentspanne p05\u2013p95 des Segments',
-        fontsize=11)
-    figure.tight_layout(rect=(0, 0.06, 1, 1))
+        'Band: Unsicherheit DES FITS (Bootstrap der Segmente), nur 2020.  '
+        'Punkte: Segmentwerte mit ihrer Drehmomentspanne', fontsize=11)
+    figure.tight_layout(rect=(0, 0.07, 1, 1))
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
     return out_path
