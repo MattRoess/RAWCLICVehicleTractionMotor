@@ -548,8 +548,27 @@ def load_fleet_ranges(params: Params) -> dict:
         fleet_frame = load(params, 'evdatabase').dropna(subset=['torque_nm'])
     except Exception:                                       # noqa: BLE001
         return _FLEET_TORQUE
-    grouped = fleet_frame.groupby('segment')['torque_nm'].agg(['min', 'max', 'count'])
-    _FLEET_TORQUE = {segment: (row['min'], row['max'], int(row['count']))
+    # ⚠️ p05 AND p95, NOT MIN AND MAX, and this was measured rather than
+    # preferred. The first version of C6 used the true extremes and made the
+    # fit WORSE: R2 on stator lamination against torque fell from 0.895 with
+    # the workbook's own torques to 0.666. A single 1760 Nm vehicle drags
+    # segment D's midpoint from 490 Nm to 1025 Nm while its mass stays where
+    # it was, so mass and torque stop agreeing.
+    #
+    # Tested against the masses, on the same fit:
+    #     workbook's own torques        R2 0.895
+    #     fleet, midpoint of p05/p95    R2 0.857   <- used
+    #     fleet, mean                   R2 0.845
+    #     fleet, median                 R2 0.818
+    #     fleet, midpoint of min/max    R2 0.666
+    #
+    # A range is meant to say where the segment's vehicles are, not where its
+    # single strangest vehicle is.
+    grouped = fleet_frame.groupby('segment')['torque_nm'].agg(
+        low=lambda s: s.quantile(0.05),
+        high=lambda s: s.quantile(0.95),
+        count='count')
+    _FLEET_TORQUE = {segment: (row['low'], row['high'], int(row['count']))
                      for segment, row in grouped.iterrows()}
     return _FLEET_TORQUE
 
@@ -908,7 +927,7 @@ CORRECTIONS = [
                  'source. Several minima match it to the kilogram (A 113, '
                  'D 290, F 345, JC 220), so the lower bound was read from it '
                  'and the upper bound was not.',
-        action='torque_min/max := the observed range of that segment',
+        action='torque_min/max := the observed p05-p95 range of that segment',
         note='Vehicle TOTAL torque, established rather than assumed: the '
              'total matches the stated minima in 4 of 11 segments against 1 '
              'of 11 for per-motor, and JC matches exactly at both ends. The '
@@ -1135,8 +1154,8 @@ def apply_corrections(frame: pd.DataFrame, params: Params) -> tuple[pd.DataFrame
         out.loc[mask, 'torqueSource'] = f'EV Database, {count} models'
         changed += int(mask.sum())
     note('C6-torque-from-fleet', changed,
-         'torque_min/max replaced with the observed range per segment '
-         f'({len(ranges)} segments)')
+         'torque_min/max replaced with the observed p05-p95 range per '
+         f'segment ({len(ranges)} segments)')
 
     # ---- C5 -------------------------------------------------------------
     mask = ((out.parameterCode == data.material_of_component) &
@@ -1965,17 +1984,63 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def figure_by_torque(grid: pd.DataFrame, params, out_path: str) -> str:
+def verify_by_torque(grid: pd.DataFrame, corrected: pd.DataFrame,
+                     params) -> pd.DataFrame:
     """
-    Composition against torque, one panel per year.
+    How well the torque fit reproduces the values it was fitted on.
 
-    ⚠️ NO SEGMENT ANYWHERE. This is the figure the stock-and-flow model's
-    input actually looks like: give it a torque and a year, read off the
-    kilograms. The segments were used to fit the relationship and dropped.
+    NOT A GOODNESS OF FIT FOR ITS OWN SAKE. The grid replaces the segment
+    dimension, so the only honest question is whether a torque and a year give
+    back what the segment rows say. This compares the fitted value at each
+    segment's own torque against that segment's own mass.
+    """
+    frame = corrected.copy()
+    if 'materialClass' not in frame.columns:
+        frame['materialClass'] = [material_class(row)
+                                  for _, row in frame.iterrows()]
+    frame = frame[(frame.parameterCode == params.data.material_of_component)]
+    frame = frame.dropna(subset=['meanValue', 'torque_min']).copy()
+    frame['torque'] = (frame.torque_min + frame.torque_max) / 2.0
 
-    Shaded to the right of the fitted range, because a grid point beyond the
-    torques the segments covered is an extrapolation and the figure should say
-    so rather than let the reader assume otherwise.
+    base = grid[(grid.productionYear == params.scenario.base_year) &
+                (grid.voltageClass == params.scenario.base_voltage)]
+
+    rows = []
+    for (motor, klass), block in frame.groupby(['componentKeyLevel1',
+                                                'materialClass']):
+        actual = block.groupby('torque')['meanValue'].sum()
+        curve = base[(base.componentKeyLevel1 == motor) &
+                     (base.materialClass == klass)]
+        if curve.empty or actual.empty:
+            continue
+        predicted_by_torque = curve.groupby('torque_nm')['meanValue'].sum()
+        fitted = np.interp(actual.index, predicted_by_torque.index,
+                           predicted_by_torque.values)
+        residual = fitted - actual.values
+        denominator = ((actual.values - actual.values.mean()) ** 2).sum()
+        rows.append({
+            'motor': motor, 'material': klass, 'n': len(actual),
+            'mean_kg': actual.mean(),
+            'mean_abs_error_kg': np.abs(residual).mean(),
+            'mean_abs_error_pct': np.abs(residual).mean() / actual.mean(),
+            'max_abs_error_kg': np.abs(residual).max(),
+            'r2': 1 - (residual ** 2).sum() / denominator if denominator else np.nan,
+        })
+    return pd.DataFrame(rows).sort_values(['motor', 'material'])
+
+
+def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
+                     corrected: pd.DataFrame = None) -> str:
+    """
+    Composition against torque, one panel per year, WITH THE FITTED POINTS.
+
+    ⚠️ NO SEGMENT ANYWHERE in the output. The segments were used to fit the
+    relationship and dropped -- but the points they contributed are drawn on
+    the base year, because a stacked area with no points under it cannot be
+    checked against anything.
+
+    Only the base year carries points. The later panels have none, and that is
+    the honest picture: nothing was measured there.
     """
     import matplotlib.pyplot as plt
 
@@ -1986,7 +2051,23 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str) -> str:
     if block.empty:
         raise ValueError(f'no rows for {motor}')
 
-    figure, axes = plt.subplots(1, len(years), figsize=(5.1 * len(years), 5.4),
+    observed = None
+    spread_low = spread_high = None
+    if corrected is not None:
+        frame = corrected.copy()
+        if 'materialClass' not in frame.columns:
+            frame['materialClass'] = [material_class(row)
+                                      for _, row in frame.iterrows()]
+        frame = frame[(frame.componentKeyLevel1 == motor) &
+                      (frame.parameterCode == params.data.material_of_component)]
+        frame = frame.dropna(subset=['meanValue', 'torque_min']).copy()
+        frame['torque'] = (frame.torque_min + frame.torque_max) / 2.0
+        observed = frame.groupby('torque')['meanValue'].sum()
+        bounds = frame.groupby('torque')[['torque_min', 'torque_max']].first()
+        spread_low = bounds.torque_min.reindex(observed.index).values
+        spread_high = bounds.torque_max.reindex(observed.index).values
+
+    figure, axes = plt.subplots(1, len(years), figsize=(5.3 * len(years), 5.6),
                                sharey=True)
     high = float(block.torque_high.max())
 
@@ -1997,18 +2078,49 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str) -> str:
         order = [k for k in MATERIAL_COLOUR if k in pivot.columns]
         axis.stackplot(pivot.index, *[pivot[k] for k in order],
                        colors=[MATERIAL_COLOUR[k] for k in order],
-                       labels=[MATERIAL_LABEL[k] for k in order], alpha=0.92)
+                       labels=[MATERIAL_LABEL[k] for k in order], alpha=0.9)
         axis.axvspan(high, pivot.index.max(), color='#000000', alpha=0.07, lw=0)
-        axis.plot(pivot.index, pivot.sum(axis=1), color='#222222', lw=1.4)
+        axis.plot(pivot.index, pivot.sum(axis=1), color='#222222', lw=1.5)
 
-        total_500 = float(pivot.sum(axis=1).reindex([500.0]).iloc[0])
-        axis.annotate(f'{total_500:.0f} kg\nbei 500 Nm', xy=(500, total_500),
-                      xytext=(-4, 12), textcoords='offset points',
-                      fontsize=9, weight='bold', ha='right')
-        axis.plot([500], [total_500], 'o', ms=7, color='#C0392B', zorder=9)
+        # THE BAND ON THE TOTAL. Drawn on the sum rather than on each layer:
+        # stacking five bands would be unreadable, and the sum is what the
+        # stock-and-flow model multiplies a fleet by.
+        band = rows.pivot_table(index='torque_nm', values=['p025', 'p975'],
+                                aggfunc='sum')
+        axis.fill_between(band.index, band.p025, band.p975, color='#111111',
+                          alpha=0.16, lw=0, zorder=7,
+                          label='95% der Ziehungen, Summe' if year ==
+                          params.scenario.base_year else None)
 
-        basis = rows.yearBasis.iloc[0]
-        axis.set_title(f'{year}  ({basis})', fontsize=11.5)
+        if observed is not None and year == params.scenario.base_year:
+            # Horizontal bars are the segment's own torque spread, p05 to p95
+            # of the vehicles in it -- a segment is not one torque.
+            axis.errorbar(observed.index, observed.values,
+                          xerr=[observed.index - spread_low,
+                                spread_high - observed.index],
+                          fmt='o', ms=8, mfc='white', mec='#111111', mew=1.8,
+                          ecolor='#111111', elinewidth=1.1, capsize=3,
+                          ls='none', zorder=9,
+                          label='Segmentwerte, auf die gefittet wurde')
+            fitted = np.interp(observed.index, pivot.index,
+                               pivot.sum(axis=1).values)
+            error = np.abs(fitted - observed.values).mean() / observed.mean()
+            # ⚠️ TWO DIFFERENT UNCERTAINTIES, and the smaller one is the band.
+            # The grey band is what the DRAWS give: how uncertain the source's
+            # own values are. The scatter of the points around the line is
+            # something else -- how much torque alone fails to explain -- and
+            # it is larger. A reader who takes the band as the total
+            # uncertainty would be reading it too narrowly, so the panel says
+            # both numbers next to each other.
+            band_width = float(((band.p975 - band.p025) /
+                                pivot.sum(axis=1)).mean())
+            axis.annotate(f'{len(observed)} Datenpunkte\n'
+                          f'Streuung um die Kurve  {error:.1%}\n'
+                          f'Ziehungsband           {band_width:.1%}',
+                          xy=(0.035, 0.96), xycoords='axes fraction',
+                          fontsize=8.5, va='top', family='monospace')
+
+        axis.set_title(f'{year}  ({rows.yearBasis.iloc[0]})', fontsize=11.5)
         axis.set_xlabel('Drehmoment [Nm]')
         axis.grid(alpha=0.22, lw=0.6)
 
@@ -2017,15 +2129,16 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str) -> str:
                       xy=(high * 1.02, 8), fontsize=8, color='#666666',
                       style='italic')
     handles, labels = axes[0].get_legend_handles_labels()
-    figure.legend(handles, labels, loc='lower center', ncol=5, fontsize=9,
+    figure.legend(handles, labels, loc='lower center', ncol=6, fontsize=8.5,
                   frameon=False, bbox_to_anchor=(0.5, -0.012))
     figure.suptitle(
         'Zusammensetzung als Funktion des Drehmoments, je Jahr \u2014 '
         f'{MOTOR_LABEL.get(motor, motor)}, {params.scenario.base_voltage} V.  '
         'Kein Segment.\n'
-        'Eingang für Stock-and-Flow: Drehmoment und Jahr hinein, '
-        'Kilogramm heraus', fontsize=11.5)
-    figure.tight_layout(rect=(0, 0.055, 1, 1))
+        'Punkte nur 2020: danach ist nichts gemessen.  '
+        'Waagrechte Balken: Drehmomentspanne p05\u2013p95 des Segments',
+        fontsize=11)
+    figure.tight_layout(rect=(0, 0.06, 1, 1))
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
     return out_path

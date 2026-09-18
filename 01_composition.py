@@ -43,6 +43,7 @@ import pandas as pd                                        # noqa: E402
 
 from src.composition import (CITATION, apply_corrections,   # noqa: E402
                              composition_by_torque, figure_by_torque,
+                             verify_by_torque,
                              audit, components, declared,
                              figure_critical, figure_factors,
                              figure_fleet, figure_motor_mass,
@@ -192,6 +193,15 @@ def main() -> int:
     print(f'  {int(grid.extrapolated.sum())} rows beyond the fitted torque '
           f'range, flagged')
 
+    check = verify_by_torque(grid, corrected, params)
+    print(f'\n  does a torque give back what the segments say?')
+    print(f'    {"motor":<24}{"material":<12}{"n":>3}{"Ø kg":>8}'
+          f'{"Ø Fehler":>10}{"max":>8}{"R2":>7}')
+    for _, row in check.iterrows():
+        print(f'    {row.motor:<24}{row.material:<12}{int(row.n):>3}'
+              f'{row.mean_kg:>8.2f}{row.mean_abs_error_pct:>9.1%}'
+              f'{row.max_abs_error_kg:>8.2f}{row.r2:>7.3f}')
+
     _rule('Written')
     os.makedirs(params.output.data_dir, exist_ok=True)
     os.makedirs(params.output.figures_dir, exist_ok=True)
@@ -233,7 +243,8 @@ def main() -> int:
                           os.path.join(figures, '04_topologies.png')),
         figure_fleet(params, os.path.join(figures, '05_fleet_demand.png')),
         figure_by_torque(grid, params,
-                         os.path.join(figures, '06_composition_by_torque.png')),
+                         os.path.join(figures, '06_composition_by_torque.png'),
+                         corrected=corrected),
     ]
 
     print(f'  {out}.xlsx              {len(current_year)} rows, '
