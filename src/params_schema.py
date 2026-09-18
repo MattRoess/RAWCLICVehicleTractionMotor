@@ -336,6 +336,168 @@ class RunParams:
 
 
 @dataclass
+class ScenarioParams:
+    """
+    How the composition changes between now and 2070.
+
+    ⚠️ NONE OF THIS IS MEASURED. One year of the trajectory is read from a
+    source; every other year is built here. These settings are the mechanism,
+    written out so that the trajectory can be argued with instead of admired.
+    """
+
+    # ******************************************************************
+    #  MATERIAL EFFICIENCY: same torque, less material.
+    #
+    #  THE OBSERVED RATE, from Drexler 2025, between the period averages
+    #  of 2018-2021 and 2022-2023 (3 years apart):
+    #      stator lamination stack   -21.1%   -7.6%/yr
+    #      winding copper, all       -23.6%   -8.6%/yr
+    #
+    #  ⚠️ AND IT CANNOT CONTINUE. -7.6%/yr compounded to 2070 leaves 3% of
+    #  the stator, which is not a motor. What Drexler measured is a step
+    #  change that happened once -- hairpin winding replacing round wire,
+    #  shorter active length, smaller outer diameter -- not a process that
+    #  repeats every year.
+    #
+    #  So the curve saturates:
+    #      m(t) = limit + (m2020 - limit) * exp(-k (t - 2020))
+    #  with k set so the INITIAL slope matches the measured rate, and
+    #  `limit` a floor that physics puts underneath.
+    # ******************************************************************
+
+    # THE FLOOR, as a share of the 2020 mass. Below these, the machine stops
+    # being able to do its job.
+    #
+    # ⚠️ ASSUMPTIONS, NOT MEASUREMENTS. No source in the registry states them.
+    # They are argued from what limits each material, and they are the single
+    # biggest lever on every 2070 number here -- vary them first.
+    #
+    #   lamination 0.55  Iron carries flux. Non-oriented electrical steel
+    #                    saturates around 2.0-2.1 T and motors run the yoke
+    #                    near 1.5-1.7 T, so pushing towards saturation buys
+    #                    roughly a quarter less iron -- and core loss rises
+    #                    with frequency squared, which is what stops it.
+    #                    Shorter active length at higher speed buys the rest.
+    #   copper     0.50  Copper carries current. The slot fill factor rises
+    #                    from about 45% for round wire to about 60-70% for
+    #                    hairpin, against a geometric ceiling near 90% that
+    #                    insulation and bending radii keep out of reach.
+    #                    Direct oil cooling then allows a higher current
+    #                    density in the same slot.
+    #   magnet     0.60  Magnet mass falls with better flux concentration and
+    #                    stronger grades, but torque needs remanence and the
+    #                    material is already near its theoretical maximum.
+    #   steel      0.75  Shafts and gearbox are limited by mechanical
+    #                    strength, not by electromagnetics, so they fall
+    #                    least.
+    #   aluminium  0.70  Housing and cooling: structure plus heat path.
+    # SAFE TO CHANGE: yes, and this is the first thing to test.
+    floor: dict[str, float] = field(default_factory=lambda: {
+        'lamination': 0.55,
+        'copper': 0.50,
+        'magnet': 0.60,
+        'steel': 0.75,
+        'aluminium': 0.70,
+    })
+
+    # THE INITIAL ANNUAL RATE, matched to Drexler where he measured it.
+    # `lamination` and `copper` are his. The others are NOT measured -- no
+    # source gives a trend for a shaft, a housing or a magnet -- and they are
+    # set slower because their floors are higher and their drivers weaker.
+    # SAFE TO CHANGE: yes.
+    initial_rate: dict[str, float] = field(default_factory=lambda: {
+        'lamination': 0.076,     # MEASURED, Drexler 2025
+        'copper': 0.086,         # MEASURED, Drexler 2025
+        'magnet': 0.030,         # assumed
+        'steel': 0.010,          # assumed
+        'aluminium': 0.015,      # assumed
+    })
+
+    # ⚠️ BEFORE THE BASE YEAR THE SAME CURVE CANNOT BE RUN BACKWARDS.
+    # Found by building it: a saturating exponential reversed is an exploding
+    # one, and at -7.6%/yr it makes a 2010 stator THREE TIMES the mass of a
+    # 2020 stator. No 2010 motor was that heavy.
+    #
+    # The reason is that the measured rate is not a constant of nature. It is
+    # the rate DURING the hairpin transition, 2018-2023 -- round wire giving
+    # way to flat wire, active length and outer diameter shrinking with it.
+    # Before that transition the same mechanism was not acting, so the
+    # backcast needs its own rate, and a slower, constant one:
+    #
+    #     m(t) = m2020 * (1 + backcast_rate) ** (2020 - t),  t < 2020
+    #
+    # ⚠️ NOT MEASURED. No source in the registry describes a 2010 motor.
+    # These are the weakest numbers in the whole project. 1.5%/yr over ten
+    # years makes a 2010 stator 16% heavier than a 2020 one, which is the
+    # right order for a decade of ordinary refinement without a technology
+    # change -- but it is a judgement, and the backcast years are labelled
+    # 'backcast' in the output so nothing can mistake them for data.
+    # SAFE TO CHANGE: yes.
+    backcast_rate: dict[str, float] = field(default_factory=lambda: {
+        'lamination': 0.015,
+        'copper': 0.015,
+        'magnet': 0.010,
+        'steel': 0.005,
+        'aluminium': 0.008,
+    })
+
+    # ******************************************************************
+    #  VOLTAGE CLASS, and what it does to copper.
+    #
+    #  Raising the DC link voltage lowers the current for the same power,
+    #  and a lower current needs less conductor. That is why 800 V is a
+    #  copper story before it is a charging story.
+    #
+    #  ⚠️ SET BY MATTHIAS 2026-09-18: 800 V has about ONE THIRD the
+    #  conductor diameter of 400 V. Recorded as given.
+    #
+    #  WHAT THAT IMPLIES, so it is not implied silently: copper mass goes
+    #  with CROSS-SECTION, which is diameter squared. A third of the
+    #  diameter is a NINTH of the cross-section, so 800 V would use about
+    #  11% of the copper of 400 V.
+    #
+    #  For comparison, the current-halving argument alone gives: twice the
+    #  voltage, half the current, half the cross-section at equal current
+    #  density, so 1/sqrt(2) = 0.71 of the diameter. The value set here is
+    #  a much larger effect than that. It may well be right for the cable
+    #  and busbar side, where insulation thickness and creepage distances
+    #  dominate and do not scale with current -- and for the stator winding
+    #  itself the halving argument is the one that applies.
+    #
+    #  Kept as set, and flagged here rather than quietly softened. The
+    #  square is applied in code, so changing the diameter ratio changes
+    #  the mass correctly.
+    #  SAFE TO CHANGE: yes.
+    # ******************************************************************
+    conductor_diameter: dict[int, float] = field(default_factory=lambda: {
+        400: 1.00,      # the reference: the fleet the dataset describes
+        800: 0.333,     # set by Matthias -- one third of the 400 V diameter
+        1000: 0.267,    # scaled from 800 V by the current ratio, 800/1000
+    })
+
+    # WHICH VOLTAGE CLASS THE BASE DATASET IS. The consolidated data
+    # describes the 2020 fleet, which is overwhelmingly 400 V.
+    # SAFE TO CHANGE: yes.
+    base_voltage: int = 400
+
+    # THE YEAR THE CURVE STARTS FROM, and the composition it starts from.
+    # This is the one year the dataset actually describes.
+    # SAFE TO CHANGE: no, unless the primary source changes.
+    base_year: int = 2020
+
+    # ⚠️ HOW FAR THE MEASURED RATE IS TRUSTED TO KEEP RUNNING. The measured
+    # rate is an average over a 3-year window in which one technology changed.
+    # `rate_decays_over` is how many years the mechanism is assumed to keep
+    # acting at all before the exponential has effectively reached its floor.
+    # It is expressed through the curve rather than as a second parameter:
+    # k = initial_rate / (1 - floor), so a high floor means a fast approach to
+    # it, and a low floor a long slow decline. Written here so the reader
+    # knows the shape is a CHOICE.
+    # SAFE TO CHANGE: no -- it is documentation of the formula above.
+    curve: str = 'saturating exponential, k = initial_rate / (1 - floor)'
+
+
+@dataclass
 class MonteCarloParams:
     """How uncertainty is propagated. It is never propagated any other way."""
 
@@ -402,10 +564,11 @@ class Params:
 
     data: DataParams = field(default_factory=DataParams)
     run: RunParams = field(default_factory=RunParams)
+    scenario: ScenarioParams = field(default_factory=ScenarioParams)
     monte_carlo: MonteCarloParams = field(default_factory=MonteCarloParams)
     output: OutputParams = field(default_factory=OutputParams)
 
-    SECTIONS = ('data', 'run', 'monte_carlo', 'output')
+    SECTIONS = ('data', 'run', 'scenario', 'monte_carlo', 'output')
 
     def validate(self) -> list[str]:
         """
@@ -488,6 +651,32 @@ class Params:
         if tuple(self.run.layer_names) != ('product', 'component', 'material', 'element'):
             issues.append('run.layer_names is the house schema\'s own nesting and '
                           'is not a setting to change')
+
+        for name, value in self.scenario.floor.items():
+            if not 0.0 < value <= 1.0:
+                issues.append(f'scenario.floor[{name!r}] is {value}; it is a '
+                              f'share of the {self.scenario.base_year} mass and '
+                              f'has to lie in (0, 1]')
+            if name not in self.scenario.initial_rate:
+                issues.append(f'scenario.floor has {name!r} and '
+                              f'scenario.initial_rate does not')
+            if name not in self.scenario.backcast_rate:
+                issues.append(f'scenario.floor has {name!r} and '
+                              f'scenario.backcast_rate does not')
+        for name, value in self.scenario.initial_rate.items():
+            if not 0.0 <= value < 1.0:
+                issues.append(f'scenario.initial_rate[{name!r}] is {value}; it '
+                              f'is a fraction per year and has to lie in [0, 1)')
+
+        if self.scenario.base_voltage not in self.scenario.conductor_diameter:
+            issues.append(f'scenario.base_voltage is '
+                          f'{self.scenario.base_voltage}, which is not a key in '
+                          f'scenario.conductor_diameter')
+        for volts, ratio in self.scenario.conductor_diameter.items():
+            if not 0.0 < ratio <= 1.0:
+                issues.append(f'scenario.conductor_diameter[{volts}] is {ratio}; '
+                              f'it is a diameter relative to the base voltage '
+                              f'and has to lie in (0, 1]')
 
         if self.monte_carlo.draws < 1000:
             issues.append(f'monte_carlo.draws is {self.monte_carlo.draws}; below '

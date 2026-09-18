@@ -811,3 +811,347 @@ def apply_corrections(frame: pd.DataFrame, params: Params) -> tuple[pd.DataFrame
          'copper -> aluminium on the induction rotor cage')
 
     return out, pd.DataFrame(log)
+
+
+# ========================================================== 6 TRAJECTORY
+# ======================================================================
+
+# Which floor and which rate a row follows, decided from the material it is
+# made of and the component it sits in. Written as a function rather than a
+# lookup so that the reasoning is visible: a shaft and a lamination stack are
+# both steel and they do not change for the same reasons.
+def material_class(row) -> str:
+    """The trajectory class of one row: lamination, copper, magnet, steel, aluminium."""
+    sub = str(row.get('componentKeyLevel3') or '')
+    material = str(row.get('materialKeyLevel1') or '')
+    component = str(row.get('componentKeyLevel2') or '')
+
+    if 'LaminationStack' in sub:
+        return 'lamination'
+    if material == 'rareEarthMetalsAndAlloys':
+        return 'magnet'
+    if material == 'CuAndCuAlloys':
+        return 'copper'
+    if material == 'AlAndAlAlloys':
+        return 'aluminium'
+    if material == 'steelAndSteelAlloys':
+        return 'steel'
+    # A component row names no material. It follows whatever dominates it.
+    if component in ('housing', 'coolingSystem'):
+        return 'aluminium'
+    if component == 'gearBox':
+        return 'steel'
+    if component == 'stator':
+        return 'lamination'
+    if component == 'rotor':
+        return 'steel'
+    return 'steel'
+
+
+def factor(year: int, klass: str, params: Params) -> float:
+    """
+    The mass at `year` as a share of the base-year mass.
+
+        m(t) / m(2020) = floor + (1 - floor) * exp(-k (t - 2020))
+        k = initial_rate / (1 - floor)
+
+    `k` is set so the INITIAL SLOPE equals the measured annual rate: at
+    t = base_year the derivative is -initial_rate, which is what Drexler
+    observed. The floor is what stops it continuing forever.
+
+    ⚠️ BEFORE THE BASE YEAR A DIFFERENT RULE APPLIES. This curve reversed is an
+    exploding exponential -- at -7.6%/yr it makes a 2010 stator three times a
+    2020 one, which no 2010 motor was. The measured rate is the rate DURING
+    the hairpin transition, not a constant of nature, so the backcast uses its
+    own slower constant rate:
+
+        m(t) = m(2020) * (1 + backcast_rate) ** (2020 - t)
+
+    Both directions are constructed. Neither is a reading.
+    """
+    scenario = params.scenario
+    if year < scenario.base_year:
+        rate = scenario.backcast_rate[klass]
+        return float((1.0 + rate) ** (scenario.base_year - year))
+
+    floor = scenario.floor[klass]
+    rate = scenario.initial_rate[klass]
+    if floor >= 1.0:
+        return 1.0
+    k = rate / (1.0 - floor)
+    return floor + (1.0 - floor) * float(np.exp(-k * (year - scenario.base_year)))
+
+
+def trajectory(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
+    """
+    The composition for every year `run.years` asks for, and every voltage
+    class in `scenario.conductor_diameter`.
+
+    ⚠️ ONE OF THESE YEARS IS READ FROM A SOURCE. The rest is this function.
+    Every row carries `yearBasis` -- measured, projected or backcast -- so that
+    no figure can draw a measured and a constructed value in one colour without
+    the code having had the chance to notice.
+
+    THE UNCERTAINTY IS THE BASE YEAR'S, SCALED. It is not widened with distance
+    from the measurement, which would be inventing a second uncertainty on top
+    of the first and dressing a modelling choice as a statistical one. What a
+    2070 value is uncertain about is whether the mechanism is right, and that
+    is not a confidence interval -- it is `scenario.floor`, and it is tested by
+    changing it.
+
+    VOLTAGE ACTS ON COPPER ONLY, and by the SQUARE of the conductor diameter,
+    because mass follows cross-section. Nothing else in the machine changes
+    with the DC link voltage in this model.
+    """
+    from src.params_schema import years_wanted
+
+    years = years_wanted(params.run.years)
+    value_columns = [c for c in ('meanValue', 'medianValue', 'modeValue',
+                                 'STD', 'p025', 'p975') if c in frame.columns]
+
+    base = frame.copy()
+    # Computed once. Doing it per year and per voltage class was the same
+    # answer 39 times over.
+    base['materialClass'] = [material_class(row) for _, row in base.iterrows()]
+
+    out = []
+    for volts, diameter in params.scenario.conductor_diameter.items():
+        copper_factor = diameter ** 2
+        for year in years:
+            block = base.copy()
+            block['productionYear'] = year
+            block['voltageClass'] = volts
+            factors = block.materialClass.map(
+                lambda klass: factor(year, klass, params))
+            # Only the conductor scales with voltage.
+            factors = factors * np.where(block.materialClass == 'copper',
+                                         copper_factor, 1.0)
+            block['trajectoryFactor'] = factors
+            for column in value_columns:
+                block[column] = block[column] * factors
+            measured = params.data.year_is_measured(year)
+            block['yearIsMeasured'] = measured
+            block['yearBasis'] = (
+                'measured' if measured else
+                ('backcast' if year < params.scenario.base_year else 'projected'))
+            out.append(block)
+
+    return pd.concat(out, ignore_index=True)
+
+
+
+# ============================================================= 7 FIGURES
+# ======================================================================
+# Colours by MATERIAL, not by component, because the question these figures
+# answer is which materials a fleet of motors will need.
+MATERIAL_COLOUR = {
+    'lamination': '#5B7C99',
+    'copper': '#B5651D',
+    'magnet': '#8E44AD',
+    'steel': '#7F8C8D',
+    'aluminium': '#16A085',
+}
+MATERIAL_LABEL = {
+    'lamination': 'Elektroblech (Blechpaket)',
+    'copper': 'Kupfer',
+    'magnet': 'Magnet (NdFeB)',
+    'steel': 'Stahl (Welle, Getriebe)',
+    'aluminium': 'Aluminium (Gehäuse, Kühlung)',
+}
+
+
+def _mark_measured(axis, params, years):
+    """
+    Shade the years a source actually covers.
+
+    THE MOST IMPORTANT THING ON THE FIGURE. A source covers 2018-2023 and
+    nothing else; everything to the right is a curve somebody chose. A reader
+    who cannot see that distinction is being misled by a plot that is
+    otherwise correct.
+
+    Drawn as a BAND and not as lines, because a line per measured year says
+    "four measurements" when what exists is one window.
+    """
+    covered = [entry.get('covers') for entry in params.data.declared('data').values()
+               if entry.get('covers')]
+    if not covered:
+        return
+    first = min(window[0] for window in covered)
+    last = max(window[1] for window in covered)
+    axis.axvspan(first, last, color='#C0392B', alpha=0.10, zorder=0, lw=0)
+    axis.axvline(first, color='#C0392B', lw=1.0, alpha=0.5, zorder=1)
+    axis.axvline(last, color='#C0392B', lw=1.0, alpha=0.5, zorder=1)
+
+
+def figure_factors(params, out_path: str) -> str:
+    """
+    The trajectory of each material class, against what Drexler measured.
+
+    The measured points are plotted so that the gap between curve and
+    measurement is visible rather than described. The curve is calibrated on
+    the ANNUAL RATE derived from Drexler's two period averages, not on the
+    ratio between them, so it does not reproduce that ratio exactly -- and
+    where it misses, the figure says so.
+    """
+    import matplotlib.pyplot as plt
+
+    from src.params_schema import years_wanted
+
+    years = years_wanted(params.run.years)
+    # FOCUS FROM THE BASE YEAR. Matthias 2026-09-18: 2010-2020 is not the
+    # essential part, 2020 onwards is. The backcast is still computed and
+    # written; it is simply not what this figure is about.
+    # From 2018, so the measured window and Drexler's own points are fully
+    # visible. Matthias 2026-09-18: 2010-2020 is not the essential part.
+    fine = list(range(2018, max(years) + 1))
+
+    figure, axis = plt.subplots(figsize=(11, 6.2))
+    _mark_measured(axis, params, fine)
+
+    for klass in params.scenario.floor:
+        axis.plot(fine, [factor(y, klass, params) for y in fine],
+                  color=MATERIAL_COLOUR[klass], lw=2.2,
+                  label=f'{MATERIAL_LABEL[klass]}  '
+                        f'(Boden {params.scenario.floor[klass]:.0%})')
+        axis.axhline(params.scenario.floor[klass],
+                     color=MATERIAL_COLOUR[klass], lw=0.8, ls=':', alpha=0.55)
+
+    # Drexler's two period averages, as the ratio between them, placed at the
+    # period midpoints. These are the only measured points on the figure.
+    measured = trends()
+    shown = {'statorSheetLaminationStack': 'lamination', 'windings.all': 'copper'}
+    for _, row in measured.iterrows():
+        klass = shown.get(row.part)
+        if klass is None:
+            continue
+        base = factor(2019.5, klass, params)
+        axis.plot([2019.5, 2022.5], [base, base * float(row.late) / float(row.early)],
+                  color=MATERIAL_COLOUR[klass], marker='o', ms=8, lw=2.6,
+                  ls='--', mfc='white', mew=2.2, zorder=5)
+
+    axis.plot([], [], color='#333333', marker='o', ms=8, ls='--', mfc='white',
+              mew=2.2, label='Drexler 2025, gemessene Periodenänderung')
+    axis.annotate('von Quellen gedeckt\n2018\u20132023', xy=(2020.5, 1.13),
+                  fontsize=8.5, color='#C0392B', ha='center', va='center')
+    axis.annotate('ab hier konstruiert \u2014 scenario.floor und '
+                  'scenario.initial_rate, keine Daten',
+                  xy=(2026, 1.15), fontsize=9, color='#444444', ha='left')
+    axis.set_xlim(min(fine), max(fine))
+    axis.set_ylim(0.35, 1.22)
+    axis.set_ylabel(f'Masse je Motor, Anteil von {params.scenario.base_year}')
+    axis.set_xlabel('Jahr')
+    axis.set_title('Materialeffizienz je Werkstoff, '
+                   f'{min(fine)}–{max(fine)}\n'
+                   'gleiche Leistung, weniger Material — '
+                   'ein gemessenes Jahr, der Rest konstruiert', fontsize=12)
+    axis.legend(loc='upper right', fontsize=9, framealpha=0.95)
+    axis.grid(alpha=0.25, lw=0.6)
+    figure.tight_layout()
+    figure.savefig(out_path, dpi=160)
+    plt.close(figure)
+    return out_path
+
+
+def figure_motor_mass(frame: pd.DataFrame, params, out_path: str) -> str:
+    """Total motor mass by material, per motor type, over time."""
+    import matplotlib.pyplot as plt
+
+    # One segment, so the figure shows the TRAJECTORY and not the spread
+    # between segments. C is the largest passenger class in the sample.
+    rows = frame[(frame.productKeyLevel3 == 'C') &
+                 (frame.parameterCode == params.data.material_of_component) &
+                 (frame.voltageClass == params.scenario.base_voltage) &
+                 (frame.productionYear >= params.scenario.base_year)]
+    motors = [m for m in params.run.motors if m in set(rows.componentKeyLevel1)]
+
+    figure, axes = plt.subplots(1, len(motors), figsize=(5.0 * len(motors), 5.4),
+                                sharey=True)
+    axes = np.atleast_1d(axes)
+
+    for axis, motor in zip(axes, motors):
+        block = rows[rows.componentKeyLevel1 == motor]
+        pivot = block.pivot_table(index='productionYear', columns='materialClass',
+                                  values='meanValue', aggfunc='sum').fillna(0.0)
+        order = [k for k in MATERIAL_COLOUR if k in pivot.columns]
+        axis.stackplot(pivot.index, *[pivot[k] for k in order],
+                       colors=[MATERIAL_COLOUR[k] for k in order],
+                       labels=[MATERIAL_LABEL[k] for k in order], alpha=0.92)
+        _mark_measured(axis, params, list(pivot.index))
+        axis.set_title(motor, fontsize=11)
+        axis.set_xlabel('Jahr')
+        axis.grid(alpha=0.22, lw=0.6)
+    axes[0].set_ylabel('Masse je Motor, Segment C  [kg]')
+    for axis in axes:
+        axis.legend(loc='upper right', fontsize=8.5, framealpha=0.95)
+    figure.suptitle('Motorzusammensetzung über die Zeit, Segment C — '
+                    'rote Linie: einziges gemessenes Jahr', fontsize=12.5)
+    figure.tight_layout()
+    figure.savefig(out_path, dpi=160)
+    plt.close(figure)
+    return out_path
+
+
+def figure_critical(frame: pd.DataFrame, params, out_path: str) -> str:
+    """
+    Copper by voltage class, and magnet by motor type.
+
+    ⚠️ THE FIRST VERSION OF THIS FIGURE SUMMED OVER VOLTAGE CLASSES, which
+    added the 400 V, 800 V and 1000 V variants of the same motor together and
+    reported 9.2 kg of copper where the 400 V machine has 7.8 kg. A variant is
+    an alternative, not a part. Filtered now, and the left panel shows the
+    variants as what they are.
+    """
+    import matplotlib.pyplot as plt
+
+    rows = frame[(frame.productKeyLevel3 == 'C') &
+                 (frame.parameterCode == params.data.material_of_component) &
+                 (frame.productionYear >= params.scenario.base_year)]
+    figure, axes = plt.subplots(1, 2, figsize=(13, 5.4))
+
+    # ---- copper, by voltage class, one motor type -----------------------
+    axis = axes[0]
+    copper = rows[(rows.materialClass == 'copper') &
+                  (rows.componentKeyLevel1 == 'PMElectricMotors')]
+    shades = {400: '#B5651D', 800: '#D99058', 1000: '#E8BFA0'}
+    for volts, group in copper.groupby('voltageClass'):
+        series = group.groupby('productionYear')['meanValue'].sum()
+        ratio = params.scenario.conductor_diameter[volts]
+        axis.plot(series.index, series.values, lw=2.4,
+                  color=shades.get(volts, '#B5651D'),
+                  label=f'{volts} V   Leiter \u00f8 {ratio:.2f} '
+                        f'\u2192 Masse {ratio ** 2:.0%}')
+    _mark_measured(axis, params, sorted(set(rows.productionYear)))
+    axis.set_title('Kupfer je Spannungsklasse, PMSM', fontsize=11.5)
+    axis.set_ylim(bottom=0)
+    axis.set_ylabel('kg je Motor, Segment C')
+
+    # ---- magnet and rare earth, by motor type ---------------------------
+    axis = axes[1]
+    magnet = rows[(rows.materialClass == 'magnet') &
+                  (rows.voltageClass == params.scenario.base_voltage)]
+    for motor, group in magnet.groupby('componentKeyLevel1'):
+        series = group.groupby('productionYear')['meanValue'].sum()
+        if series.sum() == 0:
+            continue
+        unreliable = bool((group.get('reliability', pd.Series(dtype=str))
+                           == 'unreliable').any())
+        axis.plot(series.index, series.values, lw=2.4,
+                  ls='--' if unreliable else '-',
+                  label=motor + (' \u2014 Masse unsicher' if unreliable else ''))
+    _mark_measured(axis, params, sorted(set(rows.productionYear)))
+    axis.set_title('Seltene Erden (Magnet) je Motortyp', fontsize=11.5)
+    axis.set_ylim(bottom=0)
+    axis.set_ylabel('kg je Motor, Segment C')
+
+    for axis in axes:
+        axis.set_xlabel('Jahr')
+        axis.legend(fontsize=9, framealpha=0.95)
+        axis.grid(alpha=0.22, lw=0.6)
+
+    figure.suptitle('Kritische Werkstoffe je Motor \u2014 '
+                    'rot hinterlegt: von Quellen gedeckt, sonst konstruiert',
+                    fontsize=12.5)
+    figure.tight_layout()
+    figure.savefig(out_path, dpi=160)
+    plt.close(figure)
+    return out_path

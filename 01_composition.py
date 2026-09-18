@@ -42,7 +42,9 @@ ensure_venv()
 import pandas as pd                                        # noqa: E402
 
 from src.composition import (CITATION, apply_corrections,   # noqa: E402
-                             audit, components, declared, load)
+                             audit, components, declared,
+                             figure_critical, figure_factors,
+                             figure_motor_mass, load, trajectory)
 from src.params_schema import ParameterError, current       # noqa: E402
 
 STEM = 'TractionMotor_composition'
@@ -150,12 +152,43 @@ def main() -> int:
             print(f'    {flag}: {len(rows)} rows'
                   + (f', {values.min():.2f}-{values.max():.2f} kg' if len(values) else ''))
 
+    _rule('Trajectory to 2070')
+    series = trajectory(corrected, params)
+    years = sorted(set(series.productionYear))
+    basis = series.groupby('yearBasis')['productionYear'].nunique()
+    print(f'  {len(series)} rows   {len(years)} years '
+          f'{min(years)}-{max(years)}   '
+          f'{len(params.scenario.conductor_diameter)} voltage classes')
+    for name in ('measured', 'projected', 'backcast'):
+        if name in basis:
+            print(f'    {name:<10} {int(basis[name])} years')
+
+    print('\n  material efficiency, mass as a share of '
+          f'{params.scenario.base_year}:')
+    from src.composition import factor as _factor
+    classes = list(params.scenario.floor)
+    print('      year  ' + ' '.join(f'{k:>11}' for k in classes))
+    for year in years:
+        if year < params.scenario.base_year:
+            continue
+        print(f'      {year}  '
+              + ' '.join(f'{_factor(year, k, params):>11.3f}' for k in classes))
+
+    print(f'\n  voltage, copper mass relative to '
+          f'{params.scenario.base_voltage} V:')
+    for volts, diameter in params.scenario.conductor_diameter.items():
+        print(f'      {volts:>5} V   diameter {diameter:.3f}  ->  '
+              f'cross-section and mass {diameter ** 2:.1%}')
+
     _rule('Written')
     os.makedirs(params.output.data_dir, exist_ok=True)
+    os.makedirs(params.output.figures_dir, exist_ok=True)
     out = os.path.join(params.output.data_dir, STEM)
+
     corrected.to_csv(f'{out}.csv', index=False)
+    series.to_csv(f'{out}_trajectory.csv', index=False)
     with pd.ExcelWriter(f'{out}.xlsx', engine='openpyxl') as writer:
-        corrected.to_excel(writer, sheet_name='composition', index=False)
+        corrected.to_excel(writer, sheet_name='composition_current', index=False)
         after.to_excel(writer, sheet_name='findings', index=False)
         log.to_excel(writer, sheet_name='corrections', index=False)
         declared().to_excel(writer, sheet_name='corrections_declared', index=False)
@@ -164,18 +197,26 @@ def main() -> int:
     pd.concat([before.assign(stage='before'),
                after.assign(stage='after')]).to_csv(audit_path, index=False)
 
-    corrected_rows = int((corrected.corrected != '').sum())
-    print(f'  {out}.xlsx   {len(corrected)} rows, 5 sheets')
-    print(f'  {out}.csv    {corrected_rows} rows carry a correction')
-    print(f'  {audit_path}')
+    figures = params.output.figures_dir
+    made = [
+        figure_factors(params, os.path.join(figures, '01_material_efficiency.png')),
+        figure_motor_mass(series, params,
+                          os.path.join(figures, '02_motor_mass.png')),
+        figure_critical(series, params,
+                        os.path.join(figures, '03_critical_materials.png')),
+    ]
 
-    measured = [year for year in
-                (int(y) for y in _years(params.run.years))
-                if params.data.year_is_measured(year)]
-    print(f'\n  ⚠️  This is the CURRENT composition, not a trajectory. '
-          f'{len(measured)} of the years\n      run.years asks for is measured '
-          f'({", ".join(map(str, measured)) or "none"}); the rest is built by '
-          f'§4\n      of METHODOLOGY.md, which this stage does not do.')
+    print(f'  {out}.xlsx              {len(corrected)} rows, 5 sheets')
+    print(f'  {out}_trajectory.csv    {len(series)} rows')
+    print(f'  {audit_path}')
+    for path in made:
+        print(f'  {path}')
+
+    measured = [y for y in years if params.data.year_is_measured(y)]
+    print(f'\n  ⚠️  {len(measured)} of {len(years)} years is measured '
+          f'({", ".join(map(str, measured)) or "none"}).\n'
+          f'      Everything else is scenario.floor and '
+          f'scenario.initial_rate, not data.')
     return 0
 
 
