@@ -899,9 +899,9 @@ def trajectory(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
     is not a confidence interval -- it is `scenario.floor`, and it is tested by
     changing it.
 
-    VOLTAGE ACTS ON COPPER ONLY, and by the SQUARE of the conductor diameter,
-    because mass follows cross-section. Nothing else in the machine changes
-    with the DC link voltage in this model.
+    VOLTAGE ACTS ON COPPER ONLY, and directly on its MASS. Nothing else in the
+    machine changes with the DC link voltage in this model -- which is a known
+    omission, because insulation grows with voltage and is not carried here.
     """
     from src.params_schema import years_wanted
 
@@ -915,17 +915,23 @@ def trajectory(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
     base['materialClass'] = [material_class(row) for _, row in base.iterrows()]
 
     out = []
-    for volts, diameter in params.scenario.conductor_diameter.items():
-        copper_factor = diameter ** 2
+    for volts, copper_factor in params.scenario.copper_mass.items():
         for year in years:
             block = base.copy()
             block['productionYear'] = year
             block['voltageClass'] = volts
             factors = block.materialClass.map(
                 lambda klass: factor(year, klass, params))
-            # Only the conductor scales with voltage.
-            factors = factors * np.where(block.materialClass == 'copper',
-                                         copper_factor, 1.0)
+            # ⚠️ ONLY THE STATOR WINDING SCALES WITH THE DC LINK VOLTAGE.
+            # The first version scaled every copper row, which quietly
+            # included the EESM ROTOR winding -- and that winding is fed
+            # through slip rings from a separate excitation circuit, not from
+            # the DC link. Raising the traction voltage from 400 V to 800 V
+            # does not change the field winding's current at all, so its
+            # copper must not move with it.
+            scales = ((block.materialClass == 'copper') &
+                      (block.componentKeyLevel2 == 'stator'))
+            factors = factors * np.where(scales, copper_factor, 1.0)
             block['trajectoryFactor'] = factors
             for column in value_columns:
                 block[column] = block[column] * factors
@@ -1115,11 +1121,10 @@ def figure_critical(frame: pd.DataFrame, params, out_path: str) -> str:
     shades = {400: '#B5651D', 800: '#D99058', 1000: '#E8BFA0'}
     for volts, group in copper.groupby('voltageClass'):
         series = group.groupby('productionYear')['meanValue'].sum()
-        ratio = params.scenario.conductor_diameter[volts]
+        ratio = params.scenario.copper_mass[volts]
         axis.plot(series.index, series.values, lw=2.4,
                   color=shades.get(volts, '#B5651D'),
-                  label=f'{volts} V   Leiter \u00f8 {ratio:.2f} '
-                        f'\u2192 Masse {ratio ** 2:.0%}')
+                  label=f'{volts} V   Kupfermasse {ratio:.0%} von 400 V')
     _mark_measured(axis, params, sorted(set(rows.productionYear)))
     axis.set_title('Kupfer je Spannungsklasse, PMSM', fontsize=11.5)
     axis.set_ylim(bottom=0)
@@ -1159,15 +1164,22 @@ def figure_critical(frame: pd.DataFrame, params, out_path: str) -> str:
 
 def figure_datapoints(current: pd.DataFrame, params, out_path: str) -> str:
     """
-    Every measured number this project actually has, in kilograms.
+    Every measured number this project has, in kilograms.
 
-    NOT A MODEL. No curve, no floor, no rate -- only what a source states.
-    Drexler's sample statistics with their named extreme vehicles, and the
-    consolidated dataset's per-segment values at its single vintage.
+    NOT A MODEL and NOT A TIME SERIES. The first version of this figure put
+    both sources on a year axis and placed the consolidated points at 2026.5
+    -- a position chosen to make them fit, for values that describe 2020. A
+    year axis with invented positions on it is worse than no axis.
 
-    THE POINT IS HOW LITTLE THERE IS. Everything else in this project is
-    built on these points, and a figure of them is the honest answer to
-    "what do we know".
+    What this compares is two DISTRIBUTIONS of the same quantity:
+      * Drexler, spread over 46 individual MACHINES, model years 2018-2023
+      * the consolidated dataset, spread over 11 vehicle SEGMENTS at one
+        vintage, each already an average over the machines in that segment
+
+    They are not the same kind of spread, which is the point. A segment
+    average cannot be as low as the lightest machine or as high as the
+    heaviest, and the consolidated values sitting above Drexler's mean is the
+    1.5x offset that 01_composition.py measures.
     """
     import matplotlib.pyplot as plt
 
@@ -1182,67 +1194,60 @@ def figure_datapoints(current: pd.DataFrame, params, out_path: str) -> str:
          lambda f: (f.componentKeyLevel3 == 'rotorSheetLaminationStack')),
     ]
 
-    figure, axes = plt.subplots(1, 3, figsize=(15, 5.8))
-    base = current[current.voltageClass == params.scenario.base_voltage]
+    figure, axes = plt.subplots(1, 3, figsize=(14.5, 6.2))
+    base = current[(current.voltageClass == params.scenario.base_voltage) &
+                   (current.productionYear == params.scenario.base_year)]
+    markers = {'PMElectricMotors': 'o', 'EESMElectricMotors': 's',
+               'IMandPMElectricMotors': 'D'}
 
     for axis, (part, klass, title, picker) in zip(axes, panels):
         colour = MATERIAL_COLOUR[klass]
 
-        # ---- Drexler: the sample, as a span with its named extremes -----
+        # ---- column 0: Drexler, 46 machines --------------------------------
         if part in bench.index:
             row = bench.loc[part]
             low, high, mean = float(row['min']), float(row['max']), float(row['mean'])
-            axis.fill_betweenx([low, high], 2018, 2023, color=colour, alpha=0.16,
-                               lw=0, zorder=1)
-            axis.hlines(mean, 2018, 2023, color=colour, lw=2.4, zorder=3)
-            axis.plot([2020.5], [low], marker='v', color=colour, ms=9, zorder=4)
-            axis.plot([2020.5], [high], marker='^', color=colour, ms=9, zorder=4)
-            n = '' if pd.isna(row['n']) else f", n={int(row['n'])}"
-            axis.annotate(f'{row["max_vehicle"]}\n{high:.1f} kg',
-                          xy=(2023.3, high), fontsize=7.4, va='center',
-                          color='#333333')
-            axis.annotate(f'{row["min_vehicle"]}\n{low:.1f} kg',
-                          xy=(2018.2, low), fontsize=7.4, va='bottom',
-                          ha='left', color='#333333')
-            axis.annotate(f'Drexler 2025\nStichprobe 2018–2023{n}\n'
-                          f'Mittel {mean:.1f} kg',
-                          xy=(2018.2, high * 0.97), fontsize=7.8, va='top',
-                          color=colour)
+            axis.vlines(0, low, high, color=colour, lw=16, alpha=0.22)
+            axis.plot([0], [mean], marker='_', color=colour, ms=34, mew=3.5)
+            axis.plot([0, 0], [low, high], marker='_', color=colour, ms=22,
+                      mew=2, ls='none')
+            axis.annotate(f'{high:.1f}\n{row["max_vehicle"].split(",")[0]}',
+                          xy=(0.13, high), fontsize=7.2, va='center', ha='left',
+                          color='#444444')
+            axis.annotate(f'{low:.1f}\n{row["min_vehicle"].split(",")[0]}',
+                          xy=(0.13, low), fontsize=7.2, va='center', ha='left',
+                          color='#444444')
+            axis.annotate(f'Mittel {mean:.1f}', xy=(-0.13, mean), fontsize=7.8,
+                          va='center', ha='right', color=colour)
 
-        # ---- the consolidated dataset, every segment at its one vintage --
+        # ---- column 1: the consolidated dataset, 11 segments ---------------
         rows = base[picker(base) &
-                    (base.parameterCode == params.data.material_of_component) &
-                    (base.productionYear == params.scenario.base_year)]
-        for motor, group in rows.groupby('componentKeyLevel1'):
+                    (base.parameterCode == params.data.material_of_component)]
+        for offset, (motor, group) in enumerate(rows.groupby('componentKeyLevel1')):
             values = group.meanValue.dropna()
             if values.empty:
                 continue
-            marker = {'PMElectricMotors': 'o', 'EESMElectricMotors': 's',
-                      'IMandPMElectricMotors': 'D'}.get(motor, 'o')
-            jitter = {'PMElectricMotors': -0.45, 'EESMElectricMotors': 0.0,
-                      'IMandPMElectricMotors': 0.45}.get(motor, 0.0)
-            axis.plot([2026.5 + jitter] * len(values), values, marker,
-                      ms=5.5, mfc='white', mec=colour, mew=1.4, ls='none',
-                      zorder=5,
+            axis.plot([1 + (offset - 1) * 0.18] * len(values), values,
+                      markers.get(motor, 'o'), ms=5.5, mfc='white', mec=colour,
+                      mew=1.4, ls='none',
                       label=f'{motor.replace("ElectricMotors", "")} '
                             f'({len(values)} Segmente)')
-        axis.annotate('Zenodo 2020, je Segment', xy=(2028.9, axis.get_ylim()[0]),
-                      fontsize=7.8, ha='right', va='bottom', color='#666666')
 
         axis.set_title(title, fontsize=11.5)
         axis.set_ylabel('kg je Motor')
-        axis.set_xlim(2017.4, 2029.5)
-        axis.set_xticks([2020.5, 2026.5])
-        axis.set_xticklabels(['Drexler\n2018–2023', 'Zenodo\n2020'])
+        axis.set_xlim(-0.55, 1.55)
+        axis.set_xticks([0, 1])
+        axis.set_xticklabels(['Drexler 2025\n46 Maschinen\nBj. 2018–2023',
+                              'Zenodo\n11 Segmente\nStand 2020'], fontsize=8.5)
         axis.grid(alpha=0.22, lw=0.6, axis='y')
 
     handles, labels = axes[0].get_legend_handles_labels()
     figure.legend(handles, labels, loc='lower center', ncol=3, fontsize=9,
-                  frameon=False, bbox_to_anchor=(0.5, -0.015))
-
-    figure.suptitle('Alle gemessenen Datenpunkte, die dieses Projekt hat — '
-                    'kein Modell, keine Kurve', fontsize=13)
-    figure.tight_layout()
+                  frameon=False, bbox_to_anchor=(0.5, -0.012))
+    figure.suptitle('Alle gemessenen Datenpunkte — kein Modell, keine '
+                    'Zeitachse.\nEinzelmaschinen gegen Segmentmittel: '
+                    'verschiedene Streuungen derselben Grösse', fontsize=12.5)
+    figure.tight_layout(rect=(0, 0.06, 1, 1))
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
     return out_path

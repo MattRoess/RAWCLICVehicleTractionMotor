@@ -159,7 +159,7 @@ def main() -> int:
     basis = series.groupby('yearBasis')['productionYear'].nunique()
     print(f'  {len(series)} rows   {len(years)} years '
           f'{min(years)}-{max(years)}   '
-          f'{len(params.scenario.conductor_diameter)} voltage classes')
+          f'{len(params.scenario.copper_mass)} voltage classes')
     for name in ('measured', 'projected', 'backcast'):
         if name in basis:
             print(f'    {name:<10} {int(basis[name])} years')
@@ -177,9 +177,9 @@ def main() -> int:
 
     print(f'\n  voltage, copper mass relative to '
           f'{params.scenario.base_voltage} V:')
-    for volts, diameter in params.scenario.conductor_diameter.items():
-        print(f'      {volts:>5} V   diameter {diameter:.3f}  ->  '
-              f'cross-section and mass {diameter ** 2:.1%}')
+    for volts, ratio in params.scenario.copper_mass.items():
+        print(f'      {volts:>5} V   copper mass {ratio:.1%} of '
+              f'{params.scenario.base_voltage} V')
 
     _rule('Written')
     os.makedirs(params.output.data_dir, exist_ok=True)
@@ -198,7 +198,7 @@ def main() -> int:
     with pd.ExcelWriter(f'{out}.xlsx', engine='openpyxl') as writer:
         current_year.to_excel(writer, sheet_name='composition_current',
                               index=False)
-        for volts in params.scenario.conductor_diameter:
+        for volts in params.scenario.copper_mass:
             block = current_year[current_year.voltageClass == volts]
             block.to_excel(writer, sheet_name=f'current_{volts}V', index=False)
         after.to_excel(writer, sheet_name='findings', index=False)
@@ -221,9 +221,9 @@ def main() -> int:
     ]
 
     print(f'  {out}.xlsx              {len(current_year)} rows, '
-          f'{5 + len(params.scenario.conductor_diameter)} sheets')
+          f'{5 + len(params.scenario.copper_mass)} sheets')
     print(f'  {out}_current.csv       {len(current_year)} rows, '
-          f'{len(params.scenario.conductor_diameter)} voltage classes')
+          f'{len(params.scenario.copper_mass)} voltage classes')
     print(f'  {out}_trajectory.csv    {len(series)} rows')
     print(f'  {audit_path}')
     for path in made:

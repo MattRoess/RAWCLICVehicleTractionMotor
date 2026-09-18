@@ -400,17 +400,52 @@ class ScenarioParams:
         'aluminium': 0.70,
     })
 
-    # THE INITIAL ANNUAL RATE, matched to Drexler where he measured it.
-    # `lamination` and `copper` are his. The others are NOT measured -- no
-    # source gives a trend for a shaft, a housing or a magnet -- and they are
-    # set slower because their floors are higher and their drivers weaker.
-    # SAFE TO CHANGE: yes.
+    # ******************************************************************
+    #  THE STEADY ANNUAL RATE.
+    #
+    #  ⚠️ THIS IS NOT DREXLER'S MEASURED RATE, AND THAT IS DELIBERATE.
+    #
+    #  Drexler measures -7.6%/yr for the lamination stack and -8.6%/yr for
+    #  copper between 2018-2021 and 2022-2023. An earlier version of this
+    #  file used those as the starting slope, and it produced a 37-41%
+    #  drop between 2020 and 2030 -- which Matthias did not believe, and
+    #  he was right.
+    #
+    #  THE MISTAKE WAS STRUCTURAL, not numerical. What Drexler measured is
+    #  the rate DURING A ONE-OFF TECHNOLOGY CHANGE that happened to fall
+    #  inside his window: round wire giving way to hairpin, active length
+    #  and outer diameter shrinking with it. Treating that as a standing
+    #  annual rate asserts that a comparable technology change arrives
+    #  every year and keeps arriving until 2070. It does not.
+    #
+    #  So this is the rate of ORDINARY REFINEMENT -- better steel grades,
+    #  tighter tolerances, incremental thermal gains -- with no technology
+    #  change in it. Matthias's original instruction was 'a steady
+    #  improvement, not too much, but steady', and this is that.
+    #
+    #  A FUTURE STEP CHANGE IS NOT DENIED, it is simply not modelled as a
+    #  rate. Axial flux reaching volume, or a magnet-free architecture
+    #  taking share, is a different machine and belongs in `run.motors` as
+    #  its own entry -- not hidden inside a percentage.
+    #
+    #  NOT MEASURED. No source gives a refinement rate for anything here.
+    #  SAFE TO CHANGE: yes, and this is the number to argue about.
+    # ******************************************************************
     initial_rate: dict[str, float] = field(default_factory=lambda: {
-        'lamination': 0.076,     # MEASURED, Drexler 2025
-        'copper': 0.086,         # MEASURED, Drexler 2025
-        'magnet': 0.030,         # assumed
-        'steel': 0.010,          # assumed
-        'aluminium': 0.015,      # assumed
+        'lamination': 0.010,
+        'copper': 0.010,
+        'magnet': 0.012,      # slightly faster: heavy-REE reduction is active
+        'steel': 0.004,
+        'aluminium': 0.006,
+    })
+
+    # ⚠️ WHAT DREXLER MEASURED, KEPT SO IT IS NOT LOST. Used in the figures
+    # to show the observed step against the modelled steady rate, so that the
+    # gap between them is visible and arguable rather than quietly resolved.
+    # SAFE TO CHANGE: no -- these are somebody else's measurements.
+    observed_transition_rate: dict[str, float] = field(default_factory=lambda: {
+        'lamination': 0.076,
+        'copper': 0.086,
     })
 
     # ⚠️ BEFORE THE BASE YEAR THE SAME CURVE CANNOT BE RUN BACKWARDS.
@@ -448,58 +483,47 @@ class ScenarioParams:
     #  and a lower current needs less conductor. That is why 800 V is a
     #  copper story before it is a charging story.
     #
-    #  ⚠️ SET BY MATTHIAS 2026-09-18: 800 V has about ONE THIRD the
-    #  conductor diameter of 400 V. Recorded as given.
+    #  ⚠️ SET BY MATTHIAS 2026-09-18: 800 V uses TWO THIRDS of the copper
+    #  MASS of 400 V. Stated as mass, which is what the model needs.
     #
-    #  WHAT THAT IMPLIES, so it is not implied silently: copper mass goes
-    #  with CROSS-SECTION, which is diameter squared. A third of the
-    #  diameter is a NINTH of the cross-section, so 800 V would use about
-    #  11% of the copper of 400 V.
+    #  An earlier version of this file stored a conductor DIAMETER instead
+    #  and squared it to get mass. That was a misreading, and it produced
+    #  0.86 kg of stator copper for an 800 V C-segment machine -- against
+    #  2.04-9.54 kg measured by Drexler across 46 machines that include
+    #  800 V cars. Two thirds is both what was meant and what the sample
+    #  can live with.
     #
-    #  For comparison, the current-halving argument alone gives: twice the
-    #  voltage, half the current, half the cross-section at equal current
-    #  density, so 1/sqrt(2) = 0.71 of the diameter. The value set here is
-    #  a much larger effect than that. It may well be right for the cable
-    #  and busbar side, where insulation thickness and creepage distances
-    #  dominate and do not scale with current -- and for the stator winding
-    #  itself the halving argument is the one that applies.
+    #  WHY NOT ONE HALF, which is what halving the current would suggest:
+    #  not all of the copper scales with current. Winding heads, terminals,
+    #  interconnections and minimum manufacturable cross-sections do not
+    #  shrink with the conductor, so the saving is less than the current
+    #  ratio. Two thirds is the measured-world answer to a textbook
+    #  argument.
     #
-    #  ⚠️ AND THE SAMPLE CONTRADICTS IT, for the winding. Drexler's 46
-    #  machines include 800 V cars -- Hyundai Ioniq and Kia EV6 are in the
-    #  sample, and he notes that Hyundai and BYD switch between 400 V and
-    #  800 V charging through the motor's own windings. Measured stator
-    #  copper across that sample is 2.04-9.54 kg, and the minimum belongs
-    #  to the Toyota bZ4X, a 400 V car. If an 800 V winding needed 11% of
-    #  the copper, the 800 V machines would sit far below the 400 V ones
-    #  and the sample minimum would be well under 1 kg. It is not.
-    #
-    #  Applied as set, at 0.86 kg of stator copper for an 800 V C-segment
-    #  machine. Recorded here so the number is arguable rather than
-    #  invisible.
-    #
-    #  ⚠️ AND HIGHER VOLTAGE ALSO COSTS MASS, which this model does not yet
-    #  carry. Drexler: PEEK is emerging as the primary wire insulation for
-    #  800 V+, and the stripped, welded X-pin wire ends need encapsulation
-    #  because air and creepage distances are short. Insulation, potting
-    #  and insulated bearings all grow with voltage. Only the saving is
-    #  modelled here; the penalty is missing, so 800 V looks better than it
-    #  is by an amount nobody has quantified.
-    #
-    #  Kept as set, and flagged here rather than quietly softened. The
-    #  square is applied in code, so changing the diameter ratio changes
-    #  the mass correctly.
+    #  1000 V IS DERIVED, not given. Fitting a power law through the one
+    #  stated point, mass proportional to U**-a with (800/400)**-a = 2/3,
+    #  gives a = 0.584, and (1000/400)**-a = 0.585. Written out so
+    #  that changing the 800 V value and leaving 1000 V stale is visible.
     #  SAFE TO CHANGE: yes.
     # ******************************************************************
-    conductor_diameter: dict[int, float] = field(default_factory=lambda: {
-        400: 1.00,      # the reference: the fleet the dataset describes
-        800: 0.333,     # set by Matthias -- one third of the 400 V diameter
-        1000: 0.267,    # scaled from 800 V by the current ratio, 800/1000
+    copper_mass: dict[int, float] = field(default_factory=lambda: {
+        400: 1.000,      # the reference: the fleet the dataset describes
+        800: 0.667,      # set by Matthias -- two thirds of the 400 V copper
+        1000: 0.585,      # derived from the 800 V point, power law
     })
 
     # WHICH VOLTAGE CLASS THE BASE DATASET IS. The consolidated data
     # describes the 2020 fleet, which is overwhelmingly 400 V.
     # SAFE TO CHANGE: yes.
     base_voltage: int = 400
+
+    # ⚠️ HIGHER VOLTAGE ALSO COSTS MASS, and this model does not carry it.
+    # Drexler: PEEK is emerging as the primary wire insulation for 800 V+,
+    # and the stripped, welded X-pin wire ends need encapsulation because
+    # air and creepage distances are short. Insulation, potting and
+    # insulated bearings all grow with voltage. Only the saving is
+    # modelled, so 800 V looks better than it is by an amount nobody here
+    # has quantified.
 
     # THE YEAR THE CURVE STARTS FROM, and the composition it starts from.
     # This is the one year the dataset actually describes.
@@ -689,15 +713,15 @@ class Params:
                 issues.append(f'scenario.initial_rate[{name!r}] is {value}; it '
                               f'is a fraction per year and has to lie in [0, 1)')
 
-        if self.scenario.base_voltage not in self.scenario.conductor_diameter:
+        if self.scenario.base_voltage not in self.scenario.copper_mass:
             issues.append(f'scenario.base_voltage is '
                           f'{self.scenario.base_voltage}, which is not a key in '
-                          f'scenario.conductor_diameter')
-        for volts, ratio in self.scenario.conductor_diameter.items():
+                          f'scenario.copper_mass')
+        for volts, ratio in self.scenario.copper_mass.items():
             if not 0.0 < ratio <= 1.0:
-                issues.append(f'scenario.conductor_diameter[{volts}] is {ratio}; '
-                              f'it is a diameter relative to the base voltage '
-                              f'and has to lie in (0, 1]')
+                issues.append(f'scenario.copper_mass[{volts}] is {ratio}; it is '
+                              f'a copper mass relative to the base voltage and '
+                              f'has to lie in (0, 1]')
 
         if self.monte_carlo.draws < 1000:
             issues.append(f'monte_carlo.draws is {self.monte_carlo.draws}; below '
