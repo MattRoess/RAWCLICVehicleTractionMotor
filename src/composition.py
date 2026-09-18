@@ -1941,18 +1941,31 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
 
     keys = ['componentKeyLevel1', 'componentKeyLevel2', 'componentKeyLevel3',
             'materialKeyLevel1', 'materialClass']
+
+    # ⚠️ TWO PASSES, BECAUSE A SLOPE CAN BE BORROWED. Configurations with
+    # enough segments are fitted first and their per-draw slopes kept; a
+    # configuration below run.min_segments_for_slope then takes the mean of
+    # those slopes for the same component and material, and fits only its own
+    # level. Matthias 2026-09-18: IM+PM should use the slope of the other two.
+    donors: dict[tuple, list] = {}
+    prepared = []
     for key, block in material.groupby(keys, dropna=False):
         block = block.dropna(subset=['meanValue', 'torque_min']).copy()
         if block.empty:
             continue
         block['torque'] = (block.torque_min + block.torque_max) / 2.0
         points = block.groupby('torque')['meanValue'].mean()
-        if len(points) < 3:
-            # Two points cannot carry a slope and an intercept with any
-            # confidence. Reported as a constant, and said so.
+        if len(points) < 2:
             continue
+        prepared.append((key, block, np.asarray(points.index, dtype=float)))
 
-        torques = np.asarray(points.index, dtype=float)
+    # Enough segments first, so their slopes exist when the others need them.
+    prepared.sort(key=lambda item: -len(item[2]))
+
+    for key, block, torques in prepared:
+        enough = len(torques) >= params.run.min_segments_for_slope
+        donor_key = (key[1], key[2], key[4])       # component, sub, material
+
         shock = rng.standard_normal(draws)
         sampled = np.zeros((draws, len(torques)))
         for index, torque in enumerate(torques):
@@ -2006,7 +2019,22 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
         if (~usable).any():
             beta[~usable, 0] = picked_value[~usable].mean(axis=1)
 
+        if enough:
+            donors.setdefault(donor_key, []).append(beta[:, 1])
+        else:
+            # ⚠️ SLOPE BORROWED. The level stays this configuration's own --
+            # its points fix where it sits -- and only the climb is taken
+            # from the configurations that have enough segments to establish
+            # one, per draw so the donors' own uncertainty travels with it.
+            pool = donors.get(donor_key)
+            if pool:
+                borrowed = np.mean(np.stack(pool, axis=0), axis=0)
+                level = sampled.mean(axis=1)
+                centre = torques.mean()
+                beta = np.column_stack([level - borrowed * centre, borrowed])
+
         fitted = beta[:, 0:1] + beta[:, 1:2] * grid[None, :]
+        slope_borrowed = not enough and bool(donors.get(donor_key))
 
         median = np.median(fitted, axis=0)
         low = np.percentile(fitted, 2.5, axis=0)
@@ -2038,6 +2066,7 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
                                             if year < params.scenario.base_year
                                             else 'projected')),
                         'n_segments': len(torques),
+                        'slope_borrowed': slope_borrowed,
                         'torque_low': torques.min(),
                         'torque_high': torques.max(),
                         'extrapolated': bool(torque < torques.min()

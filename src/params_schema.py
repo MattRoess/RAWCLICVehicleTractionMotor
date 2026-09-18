@@ -519,6 +519,26 @@ class RunParams:
                  'unnamed. High torque at low speed, little or no reduction.'),
     })
 
+    # ⚠️ HOW FEW SEGMENTS IS TOO FEW TO CARRY A SLOPE.
+    #
+    # Matthias 2026-09-18: IM+PM should use the slope of the other two,
+    # because its own makes no sense. It appears in three segments only, and a
+    # bootstrap of three points frequently resamples one or two distinct
+    # torques, leaving the slope barely determined -- the band came out at
+    # +/-105% with an hourglass waist, which is honest about the fit and
+    # useless as a number.
+    #
+    # Below this many segments the slope is BORROWED from the configurations
+    # that have enough, per material, and only the LEVEL is taken from the
+    # type's own points. That is the same move already made for the spec
+    # machines, and it says something defensible: an induction drive's mass
+    # rises with torque the way the others do, and what its own three points
+    # establish is where it sits, not how steeply it climbs.
+    #
+    # ⚠️ IT IS AN ASSUMPTION, and it is visible: rows carry `slope_borrowed`.
+    # SAFE TO CHANGE: yes.
+    min_segments_for_slope: int = 5
+
     # ⚠️ HOW UNCERTAIN A MACHINE BUILT FROM ONE DATA SHEET IS.
     #
     # A spec machine has no interval anywhere: a data sheet states one mass
