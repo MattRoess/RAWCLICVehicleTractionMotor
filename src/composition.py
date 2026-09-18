@@ -2156,7 +2156,11 @@ def _spec_by_torque(radial: pd.DataFrame, params: Params) -> pd.DataFrame:
                     for index, torque in enumerate(grid):
                         rows.append({
                             'componentKeyLevel1': motor,
-                            'componentKeyLevel2': '(not resolved)',
+                            # ⚠️ NO COMPONENT LEVEL. A data sheet gives a
+                            # whole-machine mass, so the material is known and
+                            # which component holds it is not. Left empty
+                            # rather than guessed at.
+                            'componentKeyLevel2': None,
                             'componentKeyLevel3': None,
                             'materialKeyLevel1': None,
                             'materialClass': klass,
@@ -2426,3 +2430,117 @@ def figure_all_types(grid: pd.DataFrame, params, out_path: str,
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
     return out_path
+
+
+# ================================================ 9 STOCK AND FLOW EXPORT
+# ======================================================================
+# The house-schema keys the stock-and-flow model joins on. Read from the
+# consolidated workbook rather than written here, so a change there travels.
+SEGMENT_KEYS = ['productKeyLevel1', 'productKeyLevel2', 'productKeyLevel3']
+
+
+def export_stock_and_flow(grid: pd.DataFrame, corrected: pd.DataFrame,
+                          params: Params) -> pd.DataFrame:
+    """
+    The composition file for `RAWCLICStockAndFlow/code/04_03_tractionmotors.py`.
+
+    ⚠️ IT CARRIES BOTH TORQUE AND SEGMENT, and it has to.
+
+    Inside this project composition is a function of torque, because that is
+    what sets the mass. The stock-and-flow model counts VEHICLES PER SEGMENT
+    and joins on `productKeyLevel2` against a cohort year -- it has no torque
+    to give. So the export evaluates the torque relationship at each segment's
+    own torque and ships the result under that segment's key, with the torque
+    it used in a column beside it.
+
+    Nothing is lost: `torque_nm` says which point on the curve produced each
+    row, and `TractionMotor_composition_by_torque.csv` remains the
+    torque-resolved form for anything that does have a torque.
+
+    ⚠️ THE UNCERTAINTY TRAVELS. `p025`, `p975` and `STD` are carried per row,
+    from the same 200,000-draw bootstrap, because the consumer is being
+    rewritten and no longer has to collapse them to a point estimate. A
+    consumer that ignores them is making that choice visibly.
+
+    ⚠️ VOLTAGE IS A ROW, NOT A FILE. `voltageClass` is a column and every
+    voltage is present, so a scenario picks one by filtering rather than by
+    opening a different file. The base voltage is what the source describes.
+    """
+    keys = corrected[SEGMENT_KEYS + ['componentKeyLevel0']].drop_duplicates()
+    keys = keys.dropna(subset=['productKeyLevel3'])
+
+    # The torque each segment actually sits at -- the same p05-p95 midpoint
+    # C6 wrote, so the export and the audit cannot disagree.
+    ranges = load_fleet_ranges(params)
+    segment_torque = {segment: (low + high) / 2.0
+                      for segment, (low, high, _) in ranges.items()}
+
+    rows = []
+    for _, key in keys.iterrows():
+        segment = key.productKeyLevel3
+        torque = segment_torque.get(segment)
+        if torque is None:
+            continue
+        for motor, block in grid.groupby('componentKeyLevel1'):
+            for volts, at_voltage in block.groupby('voltageClass'):
+                for year, at_year in at_voltage.groupby('productionYear'):
+                    # One interpolation per material, at this segment's torque.
+                    for material, line in at_year.groupby(
+                            ['componentKeyLevel2', 'componentKeyLevel3',
+                             'materialKeyLevel1', 'materialClass'],
+                            dropna=False):
+                        curve = line.sort_values('torque_nm')
+                        def at(column):
+                            values = curve[column].values
+                            if np.all(np.isnan(values)):
+                                return np.nan
+                            return float(np.interp(torque, curve.torque_nm.values,
+                                                   values))
+                        mean = at('meanValue')
+                        if not np.isfinite(mean):
+                            continue
+                        component, sub, material_key, klass = material
+                        low, high = at('p025'), at('p975')
+                        rows.append({
+                            'productKeyLevel1': key.productKeyLevel1,
+                            'productKeyLevel2': key.productKeyLevel2,
+                            'productKeyLevel3': segment,
+                            'productionYear': year,
+                            'componentKeyLevel0': key.componentKeyLevel0,
+                            'componentKeyLevel1': motor,
+                            'componentKeyLevel2': component,
+                            'componentKeyLevel3': sub,
+                            'materialKeyLevel0': _material_level0(klass),
+                            'materialKeyLevel1': material_key,
+                            'materialKeyLevel2': None,
+                            'materialKeyLevel3': None,
+                            'materialKeyLevel4': None,
+                            'materialClass': klass,
+                            'parameterCode': params.data.material_of_component,
+                            'parameter': 'mass of material (kg) in the component',
+                            'voltageClass': volts,
+                            'torque_nm': torque,
+                            'meanValue': mean,
+                            'value': mean,          # the old reader's name
+                            'p025': low, 'p975': high,
+                            'STD': ((high - low) / (2 * 1.959963984540054)
+                                    if np.isfinite(low) and np.isfinite(high)
+                                    else np.nan),
+                            'yearBasis': at_year.yearBasis.iloc[0],
+                            'nSegments': int(line.n_segments.iloc[0]),
+                            'slopeBorrowed': bool(line.get(
+                                'slope_borrowed', pd.Series([False])).iloc[0]),
+                            'sourceTier': ('tier1' if motor in
+                                           ('PMElectricMotors',
+                                            'EESMElectricMotors',
+                                            'IMandPMElectricMotors')
+                                           else 'spec'),
+                        })
+    return pd.DataFrame(rows)
+
+
+def _material_level0(klass: str) -> str:
+    """The house schema's top material level for one of our classes."""
+    return {'lamination': 'ferrousMetals0', 'steel': 'ferrousMetals0',
+            'copper': 'non-ferrousMetals', 'aluminium': 'non-ferrousMetals',
+            'magnet': 'non-ferrousMetals'}.get(klass, 'non-ferrousMetals')

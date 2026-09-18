@@ -42,7 +42,8 @@ ensure_venv()
 import pandas as pd                                        # noqa: E402
 
 from src.composition import (CITATION, apply_corrections,   # noqa: E402
-                             composition_by_torque, figure_all_types,
+                             composition_by_torque, export_stock_and_flow,
+                             figure_all_types,
                              figure_by_torque,
                              verify_by_torque,
                              audit, components, declared,
@@ -203,6 +204,19 @@ def main() -> int:
               f'{row.mean_kg:>8.2f}{row.mean_abs_error_pct:>9.1%}'
               f'{row.max_abs_error_kg:>8.2f}{row.r2:>7.3f}')
 
+    _rule('Stock-and-flow export')
+    export = export_stock_and_flow(grid, corrected, params)
+    print(f'  {len(export)} rows   '
+          f'{export.productKeyLevel3.nunique()} segments x '
+          f'{export.componentKeyLevel1.nunique()} motor types x '
+          f'{export.voltageClass.nunique()} voltages x '
+          f'{export.productionYear.nunique()} years')
+    print(f'  joins on productKeyLevel2 + productionYear, carries torque_nm, '
+          f'p025/p975 and STD')
+    borrowed = int(export.slopeBorrowed.sum())
+    if borrowed:
+        print(f'  {borrowed} rows have a borrowed slope, flagged')
+
     _rule('Written')
     os.makedirs(params.output.data_dir, exist_ok=True)
     os.makedirs(params.output.figures_dir, exist_ok=True)
@@ -218,6 +232,18 @@ def main() -> int:
     current_year.to_csv(f'{out}_current.csv', index=False)
     series.to_csv(f'{out}_trajectory.csv', index=False)
     grid.to_csv(f'{out}_by_torque.csv', index=False)
+
+    # THE FILE THE STOCK-AND-FLOW MODEL READS. Sheet name follows the house
+    # convention that 04_03 has used so far, so a rewritten consumer can keep
+    # it or not without this project having to guess.
+    export_path = os.path.join(params.output.data_dir,
+                               'TractionMotor_for_stockandflow.xlsx')
+    with pd.ExcelWriter(export_path, engine='openpyxl') as writer:
+        export.to_excel(writer, sheet_name='Consolidated data', index=False)
+        declared().to_excel(writer, sheet_name='corrections', index=False)
+        after.to_excel(writer, sheet_name='findings', index=False)
+    export.to_csv(os.path.join(params.output.data_dir,
+                               'TractionMotor_for_stockandflow.csv'), index=False)
     with pd.ExcelWriter(f'{out}.xlsx', engine='openpyxl') as writer:
         current_year.to_excel(writer, sheet_name='composition_current',
                               index=False)
@@ -256,6 +282,7 @@ def main() -> int:
           f'{len(params.scenario.copper_mass)} voltage classes')
     print(f'  {out}_trajectory.csv    {len(series)} rows')
     print(f'  {out}_by_torque.csv     {len(grid)} rows, no segment')
+    print(f'  {export_path}   {len(export)} rows  <- stock-and-flow')
     print(f'  {audit_path}')
     for path in made:
         print(f'  {path}')
