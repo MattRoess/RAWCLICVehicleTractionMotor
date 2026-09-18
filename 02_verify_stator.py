@@ -26,6 +26,13 @@ lamination stacks are measured on 46 machines. A reading that puts the
 consolidated laminations outside that measured range is a reading that has the
 regression producing values its own source never contained.
 
+⚠️ DREXLER IS DATA, NOT GROUND TRUTH. Its min and max are the extremes of a
+46-machine SAMPLE, not physical limits: a real stator outside them is
+unlikely, not impossible. So this stage weighs evidence, it does not prove.
+What makes the conclusion strong is the margin -- one reading falls outside
+ten times as often as the other, and by as much as 17 kg -- not the fact that
+any value lies outside at all.
+
 This stage changes nothing. It writes the comparison and states which reading
 the evidence supports, for `documentation/SOURCE_AUDIT.md` to record.
 """
@@ -92,14 +99,14 @@ def main() -> int:
               f'  ({above} above {high}, {below} below {low})')
 
     best = min(verdict, key=verdict.get)
-    print(f'\n  -> reading ({best}) is supported: it puts '
+    print(f'\n  -> reading ({best}) is much better supported: it puts '
           f'{len(table) - verdict[best]} of {len(table)} values inside the '
           f'measured range,\n     against '
           f'{len(table) - verdict[min(verdict, key=lambda r: -verdict[r])]} '
           f'for the other.')
     if best == 'a':
-        print('\n  The `c-p` row IS the stator. The lamination cell was filled with\n'
-              '  the stator total, and the true lamination is stator - windings.\n'
+        print('\n  On this evidence the `c-p` row is the stator, and the lamination cell\n'
+              '  was filled with the stator total, so lamination = stator - windings.\n'
               '  Total motor mass is unaffected; the material split is wrong.')
 
     # The size offset, stated so it is not mistaken for agreement. Zenodo

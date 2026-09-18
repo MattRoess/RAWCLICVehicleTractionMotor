@@ -31,6 +31,15 @@ edit this file, and do not edit `params.xlsx`. Both are outputs.
 | `run.segments` | `[]` | THE VEHICLE SEGMENTS, as `productKeyLevel3` spells them. A-F are the passenger segments and JB-JF the light commercial ones. Empty means all eleven the dataset carries. SAFE TO CHANGE: yes -- a name the dataset does not have is refused. |
 | `run.layer_names` | `["product", "component", "material", "element"]` | THE FOUR LAYERS, finest last. The stock-and-flow model reads this shape: a product holds components, a component is made of materials, a material is made of elements. SAFE TO CHANGE: no. It is the house schema's own nesting. |
 
+## `monte_carlo`
+
+| Parameter | Value | What it does |
+|---|---|---|
+| `monte_carlo.draws` | `200000` | ⚠️ EVERY DERIVED UNCERTAINTY COMES FROM DRAWS. Not from adding, subtracting or shifting intervals. A percentile is a property of a distribution, and arithmetic on two percentiles is not the percentile of the result -- it only looks like one, which is what makes it dangerous. SAFE TO CHANGE: yes. More draws, narrower Monte Carlo noise, slower run. |
+| `monte_carlo.seed` | `20260918` | THE SEED, so a figure can be reproduced exactly. SAFE TO CHANGE: yes. |
+| `monte_carlo.interval_shape` | `normal` | HOW A MEAN AND A 95% INTERVAL BECOME A DISTRIBUTION. The consolidated dataset gives mean, p025 and p975 and no draws, so a shape has to be assumed to draw at all. 'normal' takes sigma = (p975 - p025) / (2 x 1.96).  THIS IS AN ASSUMPTION AND NOT A READING. The underlying quantity is a regression confidence interval, which is normal by construction, so the assumption is a good one -- but a mass cannot go negative and a normal can, so draws are clipped at zero and the clipping is counted. SAFE TO CHANGE: yes. |
+| `monte_carlo.within_motor_correlation` | `0.9` | ⚠️ CORRELATION BETWEEN TWO MASSES OF THE SAME MOTOR, and the single most consequential assumption in the correction layer.  The stator mass and its winding mass are BOTH regressions on the same vehicle's torque, fitted to the same sample. They are not independent: a motor that is larger than the fit expects is larger in both. So subtracting them as independent variables would inflate the lamination interval by combining two errors that largely cancel.  1.0  perfectly correlated -- the interval NARROWS, because the two errors cancel. Defensible: one regression, one torque. 0.0  independent -- the interval WIDENS by sqrt(2)-ish. Wrong here, but it is what naive subtraction implies.  0.9 says: the same torque drives both, and the residual scatter of the winding fit is its own. NOT MEASURED -- the dataset gives no covariance. Stated here so it can be argued with, and varied to see whether anything depends on it. SAFE TO CHANGE: yes, and worth testing at 0.0 and 1.0. |
+
 ## `output`
 
 | Parameter | Value | What it does |

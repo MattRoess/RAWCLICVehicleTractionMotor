@@ -336,6 +336,54 @@ class RunParams:
 
 
 @dataclass
+class MonteCarloParams:
+    """How uncertainty is propagated. It is never propagated any other way."""
+
+    # ⚠️ EVERY DERIVED UNCERTAINTY COMES FROM DRAWS. Not from adding,
+    # subtracting or shifting intervals. A percentile is a property of a
+    # distribution, and arithmetic on two percentiles is not the percentile of
+    # the result -- it only looks like one, which is what makes it dangerous.
+    # SAFE TO CHANGE: yes. More draws, narrower Monte Carlo noise, slower run.
+    draws: int = 200_000
+
+    # THE SEED, so a figure can be reproduced exactly.
+    # SAFE TO CHANGE: yes.
+    seed: int = 20260918
+
+    # HOW A MEAN AND A 95% INTERVAL BECOME A DISTRIBUTION. The consolidated
+    # dataset gives mean, p025 and p975 and no draws, so a shape has to be
+    # assumed to draw at all. 'normal' takes sigma = (p975 - p025) / (2 x 1.96).
+    #
+    # THIS IS AN ASSUMPTION AND NOT A READING. The underlying quantity is a
+    # regression confidence interval, which is normal by construction, so the
+    # assumption is a good one -- but a mass cannot go negative and a normal
+    # can, so draws are clipped at zero and the clipping is counted.
+    # SAFE TO CHANGE: yes.
+    interval_shape: str = 'normal'
+
+    # ⚠️ CORRELATION BETWEEN TWO MASSES OF THE SAME MOTOR, and the single most
+    # consequential assumption in the correction layer.
+    #
+    # The stator mass and its winding mass are BOTH regressions on the same
+    # vehicle's torque, fitted to the same sample. They are not independent:
+    # a motor that is larger than the fit expects is larger in both. So
+    # subtracting them as independent variables would inflate the lamination
+    # interval by combining two errors that largely cancel.
+    #
+    #   1.0  perfectly correlated -- the interval NARROWS, because the two
+    #        errors cancel. Defensible: one regression, one torque.
+    #   0.0  independent -- the interval WIDENS by sqrt(2)-ish. Wrong here,
+    #        but it is what naive subtraction implies.
+    #
+    # 0.9 says: the same torque drives both, and the residual scatter of the
+    # winding fit is its own. NOT MEASURED -- the dataset gives no covariance.
+    # Stated here so it can be argued with, and varied to see whether anything
+    # depends on it.
+    # SAFE TO CHANGE: yes, and worth testing at 0.0 and 1.0.
+    within_motor_correlation: float = 0.9
+
+
+@dataclass
 class OutputParams:
     """Where what this project produces is written."""
 
@@ -354,9 +402,10 @@ class Params:
 
     data: DataParams = field(default_factory=DataParams)
     run: RunParams = field(default_factory=RunParams)
+    monte_carlo: MonteCarloParams = field(default_factory=MonteCarloParams)
     output: OutputParams = field(default_factory=OutputParams)
 
-    SECTIONS = ('data', 'run', 'output')
+    SECTIONS = ('data', 'run', 'monte_carlo', 'output')
 
     def validate(self) -> list[str]:
         """
@@ -439,6 +488,19 @@ class Params:
         if tuple(self.run.layer_names) != ('product', 'component', 'material', 'element'):
             issues.append('run.layer_names is the house schema\'s own nesting and '
                           'is not a setting to change')
+
+        if self.monte_carlo.draws < 1000:
+            issues.append(f'monte_carlo.draws is {self.monte_carlo.draws}; below '
+                          f'about 1000 the Monte Carlo noise is wider than the '
+                          f'uncertainty being propagated')
+        if self.monte_carlo.interval_shape != 'normal':
+            issues.append(f'monte_carlo.interval_shape is '
+                          f'{self.monte_carlo.interval_shape!r}; only "normal" '
+                          f'is implemented')
+        if not 0.0 <= self.monte_carlo.within_motor_correlation <= 1.0:
+            issues.append(f'monte_carlo.within_motor_correlation is '
+                          f'{self.monte_carlo.within_motor_correlation}; it is a '
+                          f'correlation and has to lie in [0, 1]')
 
         if not _YEARS.fullmatch((self.run.years or '').strip()):
             issues.append(f'run.years is {self.run.years!r}. It reads '

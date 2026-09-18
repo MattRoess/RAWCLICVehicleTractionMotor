@@ -19,6 +19,13 @@ from, and `data/` is not in version control (see `.gitignore`). Written here,
 every value is diffable, attributable, and changes visibly. A number that
 matters this much should not live in a file nobody can review.
 
+⚠️ THESE ARE SAMPLE STATISTICS, NOT TRUTH. n, mean, sd, min and max describe
+46 machines that happened to be torn down. The minimum and maximum are the
+extremes OF THAT SAMPLE -- a real motor outside them is unlikely, not
+impossible -- and the mean carries the sample's own composition, which is
+skewed towards whatever vehicles were available to the authors. Used as a
+range check they are strong; used as a limit they would be wrong.
+
 EACH VALUE IS TRANSCRIBED FROM THE PAPER AND NOTHING IS DERIVED. Averages,
 minima and maxima are the authors'. Where the paper gives a figure statistic
 and a slightly different number in the running text, BOTH are recorded and the

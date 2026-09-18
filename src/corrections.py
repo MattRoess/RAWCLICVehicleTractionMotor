@@ -21,7 +21,10 @@ somebody decides.
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
+
+from src import draws
 
 # Drexler et al. (2025), transcribed in src/drexler.py. Cited here by figure.
 DREXLER = 'Drexler et al. 2025, doi:10.1007/s00502-025-01331-3'
@@ -39,9 +42,11 @@ CORRECTIONS = [
                  f'Reading the c-p row as the lamination puts 10 of 24 values '
                  f'above the measured maximum, up to 52.72 kg; reading it as '
                  f'the stator puts 23 of 24 inside the range.',
-        action='lamination := c-p stator - stator windings',
+        action='lamination := c-p stator - stator windings, PER DRAW',
         note='Total motor mass is unaffected. The material split was wrong, '
-             'not the mass.',
+             'not the mass. The interval is drawn, not shifted: the '
+             'lamination is a DIFFERENCE of two correlated uncertain '
+             'masses, and its width is not the stator\'s width.',
         applied=True),
 
     # -------------------------------------------------------------- C2
@@ -136,31 +141,67 @@ def apply(frame: pd.DataFrame, params) -> tuple[pd.DataFrame, pd.DataFrame]:
         log.append(dict(id=correction_id, rows_changed=changed, what=what))
 
     # ---- C1 -------------------------------------------------------------
+    # ⚠️ THE INTERVAL IS DRAWN, NOT SHIFTED. The first version of this
+    # correction moved p025/p975 by the same amount as the mean, which is
+    # interval arithmetic wearing a disguise: it kept the stator's own width
+    # for a quantity that is a DIFFERENCE of two uncertain masses. Here the
+    # difference is taken per draw and the percentiles are of the result.
+    #
+    # The two masses are correlated -- both are regressions on the same
+    # vehicle's torque, so a motor bigger than the fit expects is bigger in
+    # both, and the errors largely cancel. `within_motor_correlation` carries
+    # that assumption, it is NOT measured, and it matters: at rho=0.9 the
+    # lamination interval is markedly narrower than the shifted one, and at
+    # rho=0 it would be wider.
+    rng = np.random.default_rng(params.monte_carlo.seed)
+    size = params.monte_carlo.draws
+    rho = params.monte_carlo.within_motor_correlation
+
     key = ['componentKeyLevel1', 'productKeyLevel3']
-    stator = out[(out.parameterCode == data.component_of_product) &
-                 (out.componentKeyLevel2 == 'stator')].set_index(key)['meanValue']
-    winding = out[(out.parameterCode == data.material_of_component) &
-                  (out.componentKeyLevel2 == 'stator') &
-                  (out.componentKeyLevel3 == 'windings')].set_index(key)['meanValue']
+    def _rows(code, **where):
+        mask = out.parameterCode == code
+        for column, value in where.items():
+            mask &= out[column] == value
+        return out[mask].set_index(key)
+
+    stator_rows = _rows(data.component_of_product, componentKeyLevel2='stator')
+    winding_rows = _rows(data.material_of_component, componentKeyLevel2='stator',
+                         componentKeyLevel3='windings')
     is_lamination = ((out.parameterCode == data.material_of_component) &
                      (out.componentKeyLevel3 == 'statorSheetLaminationStack'))
     changed = 0
+    clipped_total = 0
     for index in out[is_lamination].index:
         row = out.loc[index]
         pair = (row.componentKeyLevel1, row.productKeyLevel3)
-        total, coil = stator.get(pair), winding.get(pair)
-        if pd.isna(total) or pd.isna(coil):
+        if pair not in stator_rows.index or pair not in winding_rows.index:
             continue
-        # The uncertainty columns are shifted by the same amount rather than
-        # rescaled: the interval belongs to the regression that produced the
-        # stator mass, and subtracting a winding does not narrow it.
-        shift = total - coil - row.meanValue
-        for column in ('meanValue', 'medianValue', 'modeValue', 'p025', 'p975'):
-            if column in out.columns and pd.notna(out.at[index, column]):
-                out.at[index, column] = out.at[index, column] + shift
+        stator = stator_rows.loc[pair]
+        winding = winding_rows.loc[pair]
+        if pd.isna(stator.meanValue) or pd.isna(winding.meanValue):
+            continue
+
+        stator_draws, shock = draws.draw(
+            stator.meanValue, stator.p025, stator.p975, size, rng)
+        winding_draws, _ = draws.draw(
+            winding.meanValue, winding.p025, winding.p975, size, rng,
+            correlated_with=shock, correlation=rho)
+
+        summary = draws.summarise(stator_draws - winding_draws)
+        clipped_total += summary.pop('clipped')
+        summary.pop('clipped_share')
+        for column, value in summary.items():
+            if column in out.columns:
+                out.at[index, column] = value
+        # The mode is not drawn -- nothing in the source says what it was --
+        # so it is cleared rather than left holding the old stator total.
+        if 'modeValue' in out.columns:
+            out.at[index, 'modeValue'] = None
         out.at[index, 'corrected'] = 'C1'
         changed += 1
-    note('C1-stator-lamination', changed, 'lamination := stator - windings')
+    note('C1-stator-lamination', changed,
+         f'lamination drawn as stator - windings, {size:,} draws, rho={rho}'
+         + (f', {clipped_total} draws clipped at zero' if clipped_total else ''))
 
     # ---- C2 -------------------------------------------------------------
     mask = ((out.parameterCode == data.material_of_component) &

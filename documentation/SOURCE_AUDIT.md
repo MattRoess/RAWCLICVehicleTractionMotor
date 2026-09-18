@@ -184,7 +184,7 @@ over.
 
 | | correction | rows | evidence |
 |---|---|---|---|
-| **C1** | lamination := `stator − windings` | 24 | `02_verify_stator.py` vs Drexler Fig. 11c |
+| **C1** | lamination := `stator − windings`, **per draw** | 24 | `02_verify_stator.py` vs Drexler Fig. 11c |
 | **C2** | EESM rotor winding: rare earth → **copper** | 11 | Drexler: "sliding brushes and **copper sleeves**", 9 EESM rotors |
 | **C3** | EESM rotor winding **mass** | 0 | **NOT APPLIED — flagged** |
 | **C4** | `c-p` rows added for housing, gearBox, coolingSystem; housing material → aluminium | 78 | Consolidated description §3; Drexler §5.1.1 "cast aluminium" |
@@ -195,6 +195,33 @@ over.
 Verified rather than asserted — after correction, **72 of 72** components have
 materials summing to the component mass with a maximum deviation of `0`, and
 rare earth appears only under `permanentMagnets`.
+
+### C1's uncertainty is drawn, not shifted
+
+The first version of C1 moved `p025`/`p975` by the same amount as the mean.
+**That is interval arithmetic in disguise** — it keeps the stator's own width
+for a quantity that is a *difference of two uncertain masses*. Corrected to
+Monte Carlo: the difference is taken per draw and the percentiles are of the
+result, 200,000 draws, `src/draws.py`.
+
+The two masses are **correlated** — both are regressions on the same vehicle's
+torque, so a motor larger than the fit expects is larger in both, and the
+errors largely cancel. `monte_carlo.within_motor_correlation` carries that
+assumption. **It is not measured**; the dataset gives no covariance.
+
+It matters, and here is by how much (PM, segment C):
+
+| ρ | p025 | p975 | width |
+|---|---|---|---|
+| 0.00 | 23.3733 | 24.4104 | 1.0371 |
+| 0.50 | 23.4769 | 24.3070 | 0.8301 |
+| **0.90** | **23.5843** | **24.1990** | **0.6147** |
+| 1.00 | 23.6174 | 24.1658 | 0.5484 |
+| *(old shift)* | *23.4216* | *24.3737* | *0.9520* |
+
+**The shifted interval was 1.55× too wide.** Between ρ=0 and ρ=1 the width
+varies by a factor of 1.9, so the assumption is worth arguing with — and it is
+one line in `src/params_schema.py`.
 
 ### C3 is deliberately not applied
 
@@ -236,6 +263,9 @@ which is why the correction layer and the benchmark had to meet.
 | 2026-09-18 | The audit runs first and is kept as code, so a re-issued workbook is tested against the same list rather than against memory |
 | 2026-09-18 | The audit reports and never corrects; corrections are decisions, recorded here |
 | 2026-09-18 | C1, C2, C4, C5 applied — 38 blocking findings to 0, verified by 72/72 components summing exactly |
+| 2026-09-18 | **All derived uncertainty comes from draws**, never from shifting or adding intervals — `src/draws.py`, 200,000 draws |
+| 2026-09-18 | Within-motor correlation assumed **0.9** and NOT measured; width varies 1.9× between ρ=0 and ρ=1 |
+| 2026-09-18 | Drexler is data, not ground truth — its min/max are sample extremes of 46 machines, used as a range check and never as a limit |
 | 2026-09-18 | The source workbook is never edited; corrections are declared in code and written to `data/` |
 | 2026-09-18 | **C3 (EESM rotor winding mass) NOT applied and OPEN** — measured 3.68 kg against 7.53–10.88 kg stated, but substituting a benchmark average is a modelling decision |
 | 2026-09-18 | Blocking 1 **RESOLVED** against Drexler 2025: the `c-p` row is the stator; the lamination cell holds the stator total. Motor mass unaffected, material split wrong |
