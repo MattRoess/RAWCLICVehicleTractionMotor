@@ -85,8 +85,8 @@ central complaint:
 > the dataset; it is used to check values established elsewhere.
 
 Its **method** is still the right idea — scale a bill of material by torque
-rather than quote one reference motor — and §2.2 below takes that idea without
-taking its numbers.
+rather than quote one reference motor — and §2.2 below shows that the
+current benchmark doing exactly that is already upstream of tier 1.
 
 ### 2.1 Age applies to the weights, not to the composition
 
@@ -156,22 +156,69 @@ one is not, because a 2018 number silently fixes a 2018 design into a 2030 or
 2060 row, and the whole time dimension of this model is the claim that the
 design does not stay fixed.
 
-### 2.2 Recent bills of material do not exist in public, and that is the finding
+### 2.2 The recent benchmark exists, and it is upstream of tier 1
 
-Searched 2026-09-18. **No recent, complete, motor-only bill of material at a
-matched rating is published for any of the five motors.** This is the same gap
-the critical review identified, and nothing since has closed it.
+**Corrected 2026-09-18.** This section previously recorded that no recent
+public motor bill of material exists. That is wrong, and the answer was inside
+the dataset the project already had.
 
-Where the current numbers actually are:
+The consolidated dataset's own description names its source:
 
-| | holds it | usable |
-|---|---|---|
-| **Munro Live** (YouTube) | **current teardowns, free** — see 2.3 | **yes**, and it is the best recent source found |
-| **A2MAC1**; Munro's written reports | current teardowns, component by component | commercial. Munro's 10-motor comparison is **2020** and paid — **verification only**, §2.1 |
-| **IDTechEx** | architecture shares and trends | commercial; already cited by the review |
-| **ORNL / DOE VTO** | public teardowns, real weighed parts | the motor teardowns are older; recent work is inverters and drive units |
-| **OEM technical papers** | one machine each, well documented | scattered, and rarely a full BOM |
-| **Steel and magnet suppliers** | what the material IS | **public and current** — JFE and Nippon Steel give non-oriented electrical steel as 3.0–4.5 wt% Si, 0.15–2.5 wt% Al |
+> **Drexler, D., Kampker, A., Born, H., et al.** *Advances in electric motors:
+> a review and benchmarking of product design and manufacturing technologies.*
+> Elektrotech. Inftech. **142**, 312-345 (2025).
+> doi:10.1007/s00502-025-01331-3
+
+**Every mass in the consolidated dataset is a regression through Drexler's
+benchmark points.** Not a second opinion on tier 1 -- the first one, at full
+resolution. The description states the method plainly: component
+weight-torque relationships fitted by linear regression, uncertainty taken
+from the regression confidence interval, torques per car model from the EV
+Database, Monte Carlo propagation, averaged per segment.
+
+Two consequences:
+
+1. **Tier 1 is current, not old.** The deliverable is dated **29.05.2026** and
+   was reviewed by Valeo. The `-2020` in `productionYear` is the vintage the
+   data *describes*, not the age of the source.
+2. **Drexler at full resolution answers what the segment averages cannot** --
+   per machine rather than per segment, and it is the only thing that can
+   settle the blocking finding in `SOURCE_AUDIT.md`, which is unresolvable
+   from inside the consolidated file because both readings are internally
+   consistent.
+
+**Still to obtain.** Springer requires authentication and MDPI returned 403 on
+the automated fetch. Declared in the registry with a blank file, which is the
+honest state: known, not yet in hand.
+
+### 2.2.1 Adding a source is a declaration, not a code change
+
+`data.sources` in `src/params_schema.py` is the whole interface. One entry per
+source:
+
+| field | |
+|---|---|
+| `file` | path, **blank = declared but not yet in hand** |
+| `role` | `data` may supply values; `verification` may only be compared against |
+| `tier` | `tier1` measured and in the house schema, `tier2` everything else |
+| `vintage` / `published` | what the data describes, and when it was issued |
+| `reads` | which reader understands the file |
+| `citation` | what a figure caption must be able to say |
+
+No stage names a file. Every stage asks the registry for the sources it is
+entitled to, so a new bill of material reaches the whole project by being
+declared.
+
+**`role` is a gate in code, not a label.** `src/source.py:load()` raises
+`PermissionError` on a verification source, and `load_verification()` refuses a
+data source. §2.1 is enforced rather than remembered, because a rule that lives
+only in prose is a rule that gets broken by whoever is in a hurry.
+
+Every row a reader returns is stamped with `sourceName` and `sourceTier`, so a
+frame that has travelled two function calls can still say where it came from.
+
+**Adding Drexler when the file arrives:** set its `file`, write a `bom` reader
+against the actual document. Nothing else changes.
 
 ### 2.3 Munro Live: rejected 2026-09-18
 
@@ -371,7 +418,9 @@ Tb raise. If a different quantity was meant, this section changes.
 | 2026-09-18 | Chalmers, Munro 2020 and GREET are **verification sources, not data sources** — no number from any of them enters the dataset, at any layer |
 | 2026-09-18 | Verification comparisons are written in documentation, never in `data/`; a disagreement is resolved against the admissible sources, never towards the old one |
 | 2026-09-18 | Composition comes from supplier datasheets and standards; a value no admissible source supports is derived with a stated method, not borrowed |
-| 2026-09-18 | No recent public motor-only BOM exists in writing; bills of material are DERIVED from current ratings and current material shares |
+| 2026-09-18 | ~~No recent public motor-only BOM exists~~ **CORRECTED**: Drexler et al. 2025 is the recent benchmark, and it is the upstream of the tier-1 dataset |
+| 2026-09-18 | Tier 1 is CURRENT — deliverable dated 29.05.2026, reviewed by Valeo; `-2020` is the vintage described, not the age |
+| 2026-09-18 | Sources live in one registry, `data.sources`; adding a source is a declaration, and `role` is enforced in code |
 | 2026-09-18 | Munro REJECTED — the videos do not weigh parts, the written benchmark is 2020 and paid |
 | 2026-09-18 | Free and current sources only: GREET first, then JRC, IEA, steel-supplier datasheets and OEM statements |
 | 2026-09-18 | Five motors: three from the dataset, axial flux and dual-rotor radial added as tier 2 |

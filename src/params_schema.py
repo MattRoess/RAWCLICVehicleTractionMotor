@@ -56,42 +56,160 @@ class ParameterError(ValueError):
     """Raised when a setting in this file cannot be used as written."""
 
 
+# The roles a source may have. `data` may supply values into the dataset;
+# `verification` may only be compared against it. METHODOLOGY.md §2.1 -- and
+# it is enforced here rather than remembered, because a rule that lives only
+# in prose is a rule that gets broken by whoever is in a hurry.
+ROLES = ('data', 'verification')
+
+# How far a number may be trusted. `tier1` is measured and in the house
+# schema; `tier2` is everything else and has to be labelled wherever it is
+# drawn. METHODOLOGY.md §2.
+TIERS = ('tier1', 'tier2')
+
+# The readers that exist. A source declares which shape its file is in, so
+# that adding a source is a declaration and not a code change -- until the
+# shape is genuinely new, which is what `READERS` makes visible.
+READERS = ('house', 'bom')
+
+
 @dataclass
 class DataParams:
-    """Where the source data is, and how its rows are labelled."""
+    """Every source this project knows about, and what each one may be used for."""
 
-    # THE CONSOLIDATED DATASET, and the only measured source this project has.
-    # Written from the project root.
-    # SAFE TO CHANGE: yes -- it must point at a file that exists.
-    consolidated_file: str = (
-        'documentation/TractionMotor/Zenodo/RAWCLIC_BEV_motor_consolidated_data_V1.xlsx')
+    # ******************************************************************
+    #  THE SOURCE REGISTRY. **ADD A SOURCE BY ADDING AN ENTRY HERE.**
+    #
+    #  Nothing else has to change. No stage names a file; every stage asks
+    #  this registry for the sources it is entitled to, so a new bill of
+    #  material becomes available to the whole project by being declared.
+    #
+    #  Each entry:
+    #    file      path from the project root. **BLANK MEANS DECLARED BUT
+    #              NOT YET IN HAND** -- the source is known, the file is not
+    #              here. That is not an error; it is the honest state of a
+    #              source we have found and not yet obtained.
+    #    sheet     worksheet, where it matters.
+    #    role      'data'         may supply values into the dataset
+    #              'verification' may ONLY be compared against it
+    #    tier      'tier1' measured and in the house schema; 'tier2' else
+    #    vintage   the year the DATA describes -- not when it was published
+    #    published the year the source was issued
+    #    reads     which reader in src/source.py understands the file
+    #    citation  what a figure caption has to be able to say
+    #
+    #  ⚠️ `role` IS A GATE AND NOT A LABEL. A 'verification' source is
+    #  refused by the data path, in code. METHODOLOGY.md §2.1: the age of a
+    #  source applies to its WEIGHTS, and a source too old to supply a mass
+    #  is too old to be quietly holding up a composition nobody checked.
+    #  SAFE TO CHANGE: yes -- that is the point of this block.
+    # ******************************************************************
+    sources: dict[str, dict] = field(default_factory=lambda: {
 
-    # The sheet holding the rows. The other sheet, `Guideline`, documents the
-    # 43 columns and is not read.
+        # TIER 1. The only measured source in the house schema. Dated
+        # 29.05.2026 and reviewed by Valeo, so it is CURRENT -- the `-2020`
+        # in productionYear is the vintage it describes, not its age.
+        # Its masses are a torque regression fitted to Drexler 2025.
+        'zenodo': dict(
+            file='documentation/TractionMotor/Zenodo/'
+                 'RAWCLIC_BEV_motor_consolidated_data_V1.xlsx',
+            sheet='consolidated_data',
+            role='data', tier='tier1', vintage=2020, published=2026,
+            reads='house',
+            citation='RAWCLIC Deliverable 3.1, Harmonized datasets for '
+                     'secondary RM sources for the twin transition, V1, '
+                     '29.05.2026'),
+
+        # THE UPSTREAM OF TIER 1, and the recent benchmark this project has
+        # been looking for. Every mass in the consolidated dataset is a
+        # regression through ITS data points, so it is not a second opinion
+        # -- it is the first one, at full resolution and per machine rather
+        # than per segment. It also settles what a component mass in the
+        # consolidated file is supposed to mean, which is the one blocking
+        # finding the audit cannot resolve from inside the data.
+        'drexler2025': dict(
+            file='', sheet='',
+            role='data', tier='tier2', vintage=2025, published=2025,
+            reads='bom',
+            citation='Drexler, D., Kampker, A., Born, H., et al. Advances in '
+                     'electric motors: a review and benchmarking of product '
+                     'design and manufacturing technologies. Elektrotech. '
+                     'Inftech. 142, 312-345 (2025). '
+                     'doi:10.1007/s00502-025-01331-3'),
+
+        # VERIFICATION ONLY. Too old to supply a mass, and therefore -- §2.1
+        # -- not a data source at any layer. Declared so that a comparison
+        # against them is reproducible and so that nobody proposes them as
+        # data again.
+        'chalmers2018': dict(
+            file='', sheet='',
+            role='verification', tier='tier2', vintage=2017, published=2018,
+            reads='bom',
+            citation='Nordelof et al., A scalable life cycle inventory of an '
+                     'electrical automotive traction machine, Int J LCA, '
+                     'Part I (2017), Part II (2018)'),
+        'munro2020': dict(
+            file='', sheet='',
+            role='verification', tier='tier2', vintage=2020, published=2020,
+            reads='bom',
+            citation='Munro & Associates, 10-motor benchmark (2020), paid'),
+        'greet': dict(
+            file='', sheet='',
+            role='verification', tier='tier2', vintage=2020, published=2025,
+            reads='bom',
+            citation='Argonne National Laboratory, R&D GREET, vehicle '
+                     'material composition'),
+    })
+
+    # WHICH SOURCE IS THE BASE. The one every stage starts from, and the one
+    # the audit checks. It has to be a 'data' source that is present.
     # SAFE TO CHANGE: yes.
-    consolidated_sheet: str = 'consolidated_data'
+    primary: str = 'zenodo'
 
-    # THE ELEMENT COMPOSITION, when it arrives. Derived from the consolidated
-    # dataset rather than from anywhere else, so it inherits its boundaries.
-    # BLANK MEANS NOT YET. A stage that needs elements says so and stops,
-    # rather than inventing them: the consolidated file has no element layer,
-    # and a model that quietly proceeds without one reports a motor made of
-    # nothing but materials.
+    # THE ELEMENT COMPOSITION, when it arrives. BLANK MEANS NOT YET: no
+    # source in the registry carries an element layer, so a stage that needs
+    # elements says so and stops rather than inventing them.
     # SAFE TO CHANGE: yes.
     composition_file: str = ''
     composition_sheet: str = ''
 
-    # THE THREE PARAMETER CODES, as the house schema spells them. A row says
-    # which of the three it is, and nothing else in the file distinguishes a
-    # component share from a material share.
+    # THE THREE PARAMETER CODES, as the house schema spells them.
     #   c-p   this component, as a share of the product
     #   m-c   this material, as a share of the component
     #   e-m   this element, as a share of the material
-    # SAFE TO CHANGE: no, unless the house schema changes. They are written
-    # here so that no stage spells one out for itself.
+    # SAFE TO CHANGE: no, unless the house schema changes.
     component_of_product: str = 'c-p'
     material_of_component: str = 'm-c'
     element_of_material: str = 'e-m'
+
+    # ---- convenience, so no stage reaches into the registry by hand ----
+
+    @property
+    def consolidated_file(self) -> str:
+        """The primary source's path."""
+        return self.sources.get(self.primary, {}).get('file', '')
+
+    @property
+    def consolidated_sheet(self) -> str:
+        """The primary source's worksheet."""
+        return self.sources.get(self.primary, {}).get('sheet', '')
+
+    def usable(self, role: str = 'data') -> dict[str, dict]:
+        """
+        The declared sources with that role whose file is actually here.
+
+        THE ROLE GATE LIVES HERE. Asking for 'data' cannot return a
+        verification source, whatever a caller intends, because the filter is
+        on the registry and not on the caller's memory.
+        """
+        return {name: entry for name, entry in self.sources.items()
+                if entry.get('role') == role and entry.get('file')
+                and os.path.isfile(entry['file'])}
+
+    def declared(self, role: str = 'data') -> dict[str, dict]:
+        """Sources with that role, present or not -- what the project knows of."""
+        return {name: entry for name, entry in self.sources.items()
+                if entry.get('role') == role}
 
 
 @dataclass
@@ -199,12 +317,46 @@ class Params:
         """
         issues: list[str] = []
 
-        if not self.data.consolidated_file:
-            issues.append('data.consolidated_file is empty -- it names the only '
-                          'measured source this project has')
-        elif not os.path.isfile(self.data.consolidated_file):
-            issues.append(f'data.consolidated_file points at '
-                          f'{self.data.consolidated_file!r}, which is not a file')
+        # THE REGISTRY. Every entry is checked, so a typo in a source added
+        # today is reported today and not on the run that first needs it.
+        for name, entry in self.data.sources.items():
+            where = f'data.sources[{name!r}]'
+            if entry.get('role') not in ROLES:
+                issues.append(f'{where}["role"] is {entry.get("role")!r}; it has '
+                              f'to be one of {ROLES}. "verification" means the '
+                              f'source may be compared against and never read '
+                              f'into the dataset.')
+            if entry.get('tier') not in TIERS:
+                issues.append(f'{where}["tier"] is {entry.get("tier")!r}; it has '
+                              f'to be one of {TIERS}')
+            if entry.get('reads') not in READERS:
+                issues.append(f'{where}["reads"] is {entry.get("reads")!r}; it '
+                              f'has to be one of {READERS}. A genuinely new file '
+                              f'shape needs a reader in src/source.py before it '
+                              f'can be declared.')
+            if not entry.get('citation'):
+                issues.append(f'{where} has no citation. Every number this '
+                              f'project reports has to be attributable, so a '
+                              f'source without one cannot be used.')
+            # A blank file is a source we know of and do not yet have. A named
+            # file that is not there is a mistake.
+            if entry.get('file') and not os.path.isfile(entry['file']):
+                issues.append(f'{where}["file"] is {entry["file"]!r}, which is '
+                              f'not a file. Leave it blank until the file is '
+                              f'actually here.')
+
+        if self.data.primary not in self.data.sources:
+            issues.append(f'data.primary is {self.data.primary!r}, which is not '
+                          f'a key in data.sources')
+        else:
+            entry = self.data.sources[self.data.primary]
+            if entry.get('role') != 'data':
+                issues.append(f'data.primary is {self.data.primary!r}, whose role '
+                              f'is {entry.get("role")!r}. The base source of the '
+                              f'project cannot be a verification source.')
+            if not entry.get('file'):
+                issues.append(f'data.primary is {self.data.primary!r} and its file '
+                              f'is blank -- there is nothing to read')
 
         # The element workbook is allowed to be missing -- it does not exist
         # yet. Naming one that is not there is a different matter.
@@ -271,43 +423,34 @@ def describe(section, name: str) -> str:
 
 def source_status(params: Params) -> str:
     """
-    Whether the two source workbooks are actually there, in plain language.
+    Every declared source, whether it is here, and what it may be used for.
 
-    Printed on every run of 00_parameters. A missing element workbook is not a
-    settings error -- it does not exist yet, and the settings say so by leaving
-    the name blank -- but it is the single thing most worth knowing before
-    expecting a composition out of this project.
+    Printed on every run of 00_parameters. A source declared with a blank file
+    is not a fault -- it is one we have found and not yet obtained -- and
+    seeing the list is the point: it is the project's own account of what it
+    is standing on.
     """
     lines = []
-    path = params.data.consolidated_file
-    if not path:
-        lines.append('consolidated  NOT SET')
-    elif not os.path.isfile(path):
-        lines.append(f'consolidated  {path}\n                NOT FOUND')
-    else:
-        try:
-            import pandas as pd
-            frame = pd.read_excel(path, sheet_name=params.data.consolidated_sheet)
-            motors = sorted(set(frame['componentKeyLevel1'].dropna()))
-            years = sorted(set(map(str, frame['productionYear'].dropna())))
-            codes = sorted(set(map(str, frame['parameterCode'].dropna())))
-            lines.append(f'consolidated  {path}\n'
-                         f'                {len(frame)} rows, '
-                         f'motors {", ".join(motors)}\n'
-                         f'                productionYear {", ".join(years)}, '
-                         f'parameterCode {", ".join(codes)}')
-        except Exception as error:                       # noqa: BLE001
-            lines.append(f'consolidated  {path}\n                unreadable: {error}')
+    for name, entry in params.data.sources.items():
+        path = entry.get('file') or ''
+        if not path:
+            state = 'DECLARED, file not yet in hand'
+        elif os.path.isfile(path):
+            state = path
+        else:
+            state = f'{path}\n                  NOT FOUND'
+        mark = '*' if name == params.data.primary else ' '
+        lines.append(f'{mark} {name:<14} {entry.get("role","?"):<12} '
+                     f'{entry.get("tier","?"):<6} '
+                     f'vintage {entry.get("vintage","?")}\n'
+                     f'                  {state}')
 
-    if not params.data.composition_file:
-        lines.append('elements      NOT YET. `data.composition_file` is blank, so no '
-                     'element layer\n                exists -- the consolidated '
-                     'dataset has none either.')
-    elif os.path.isfile(params.data.composition_file):
-        lines.append(f'elements      {params.data.composition_file}')
+    if params.data.composition_file:
+        lines.append(f'  elements       {params.data.composition_file}')
     else:
-        lines.append(f'elements      {params.data.composition_file}\n'
-                     f'                NOT FOUND')
+        lines.append('  elements       NOT YET. No source in the registry carries '
+                     'an element layer.')
+    lines.append('  (* is data.primary)')
     return '\n  '.join(lines)
 
 
@@ -322,7 +465,7 @@ def flatten(params: Params) -> list[list]:
                 f.name,
                 describe(section, f.name),
                 f'{section_name}.{f.name}',
-                json.dumps(value) if isinstance(value, (list, tuple)) else value,
+                json.dumps(value) if isinstance(value, (list, tuple, dict)) else value,
             ])
     return rows
 

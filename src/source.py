@@ -40,17 +40,85 @@ REQUIRED = (
 IDENTICAL = 1e-9
 
 
-def load(params: Params) -> pd.DataFrame:
-    """The consolidated rows, with the columns the checks need present."""
-    frame = pd.read_excel(params.data.consolidated_file,
-                          sheet_name=params.data.consolidated_sheet)
-    missing = [column for column in REQUIRED if column not in frame.columns]
-    if missing:
-        raise KeyError(
-            f'{params.data.consolidated_file} is missing the columns '
-            f'{missing}. The audit is written against the RAWCLIC house '
-            f'schema; a workbook without these is a different shape and has '
-            f'to be looked at by hand before it can be checked.')
+def load(params: Params, name: str = '') -> pd.DataFrame:
+    """
+    One declared source, read by whichever reader it says it needs.
+
+    `name` defaults to `data.primary`. **A VERIFICATION SOURCE IS REFUSED
+    HERE**, in code, not by convention: METHODOLOGY.md §2.1 says no number
+    from Chalmers, Munro 2020 or GREET enters the dataset, and a rule that
+    lives only in prose is a rule that gets broken by whoever is in a hurry.
+    Compare against those sources with `load_verification`, which says in its
+    name what the result may be used for.
+    """
+    name = name or params.data.primary
+    entry = params.data.sources.get(name)
+    if entry is None:
+        raise KeyError(f'{name!r} is not a source in data.sources. Declared: '
+                       f'{sorted(params.data.sources)}')
+    if entry.get('role') != 'data':
+        raise PermissionError(
+            f'{name!r} is a {entry.get("role")!r} source and cannot be read into '
+            f'the dataset (METHODOLOGY.md §2.1). Its numbers may only be '
+            f'compared against values established elsewhere -- use '
+            f'load_verification({name!r}).')
+    return _read(params, name, entry)
+
+
+def load_verification(params: Params, name: str) -> pd.DataFrame:
+    """
+    A verification source, for comparison only.
+
+    Separate from `load` so that the call site says which it is. Nothing read
+    here may be written into `data/`; the comparison belongs in documentation.
+    """
+    entry = params.data.sources.get(name)
+    if entry is None:
+        raise KeyError(f'{name!r} is not a source in data.sources')
+    if entry.get('role') != 'verification':
+        raise PermissionError(f'{name!r} is a {entry.get("role")!r} source; '
+                              f'read it with load()')
+    return _read(params, name, entry)
+
+
+def _read(params: Params, name: str, entry: dict) -> pd.DataFrame:
+    """Dispatch to the reader the source declares, and check what came back."""
+    path = entry.get('file')
+    if not path:
+        raise FileNotFoundError(
+            f'{name!r} is declared but its file is blank -- the source is known '
+            f'and not yet in hand. Put the file in place and set '
+            f'data.sources[{name!r}]["file"].')
+
+    reader = entry.get('reads')
+    if reader == 'house':
+        frame = pd.read_excel(path, sheet_name=entry.get('sheet') or 0)
+        missing = [column for column in REQUIRED if column not in frame.columns]
+        if missing:
+            raise KeyError(
+                f'{path} is missing the columns {missing}. `reads="house"` means '
+                f'the RAWCLIC house schema; a workbook without these is a '
+                f'different shape and needs its own reader.')
+    elif reader == 'bom':
+        # A published benchmark, in whatever shape its authors chose. There is
+        # no such file in hand yet, so there is nothing to guess at: the reader
+        # is written when the first one arrives, against that file. Declaring
+        # the shape now would be inventing a schema for a document nobody here
+        # has opened.
+        raise NotImplementedError(
+            f'{name!r} declares reads="bom" and no bom reader exists yet. '
+            f'Write one in src/source.py against the actual file, then this '
+            f'source loads with no other change.')
+    else:
+        raise ValueError(f'{name!r} declares an unknown reader {reader!r}')
+
+    # Stamp provenance onto the rows themselves. A frame that has travelled
+    # two function calls should still be able to say where it came from, so
+    # that no figure can draw a tier-1 and a tier-2 number in one colour
+    # without the code having had the chance to notice.
+    frame = frame.copy()
+    frame['sourceName'] = name
+    frame['sourceTier'] = entry.get('tier')
     return frame
 
 
