@@ -161,15 +161,66 @@ MACHINES = [
          url='yasa.com/media/2021/05/yasa-p400rdatasheet-rev-14.pdf'),
 ]
 
-# ⚠️ WHAT IS NOT HERE AND WHY. The YASA 750R is 790 Nm peak and 200 kW at
-# 98 mm axial length, and its MASS is not published -- the data sheet is
-# released on request only. It is left out rather than guessed. DeepDrive
-# publishes no mass either.
+# ⚠️ DONUT LAB IS A WHEEL TORQUE AND CANNOT GO ON THE SAME AXIS.
+# The 21-inch in-wheel motor is 630 kW, 4300 Nm and 40 kg. That 4300 Nm is
+# torque AT THE WHEEL, produced with no gearbox at all. Every torque in the
+# consolidated dataset is MOTOR torque, upstream of a reduction of roughly
+# 8-10:1. Putting 4300 Nm beside 370 Nm would compare a wheel with a shaft
+# and make the in-wheel machine look seventeen times better than it is.
+#
+# Held here with `torque_is_wheel=True` so nothing can draw it by accident.
+# A fair comparison needs the radial machine's gearbox included and its motor
+# torque multiplied by the reduction ratio -- and the dataset does not carry
+# a reduction ratio, so that comparison is not available yet.
+WHEEL_MACHINES = [
+    dict(name='Donut Lab 21" hypercar', topology='axialFluxPM in-wheel',
+         maker='Donut Lab', mass_kg=40.0, mass_basis='whole in-wheel motor',
+         torque_wheel=4300.0, power_peak_kw=630.0, torque_is_wheel=True,
+         gearbox='none, direct drive',
+         source='Donut Lab motor family, CES 2025', url='donutlab.com/motor/'),
+]
+
+# ⚠️ WHAT IS NOT HERE, AND THE PATTERN IN WHY.
+#
+#   YASA 750R       790 Nm peak, 200 kW, 98 mm axial -- MASS on request only
+#   DeepDrive       publishes no mass
+#   Valeo           EESM, hairpin stator, 210 mm diameter, combined
+#                   water/oil cooling, +30% power density, -30% CO2 vs PMSM,
+#                   SOP 2027 -- NO mass, NO torque
+#   Valeo + MAHLE   iBEE, brushless EESM, 220-350 kW peak, 800 V,
+#                   >40% lower production carbon -- NO mass, NO torque
+#   ZF              I2SM, in-rotor inductive excitation, 400 V and 800 V,
+#                   90 mm shorter than a conventional EESM, 15% lower rotor
+#                   transmission losses -- NO mass, NO torque
+#
+# THE PATTERN IS THE FINDING. Suppliers who sell motors as a COMPONENT to
+# integrators publish mass, because an integrator has to package it: YASA,
+# Donut Lab, Equipmake. Suppliers who sell into OEM programmes publish power
+# bands and advantages and never a mass, because the mass is negotiated per
+# programme and is commercially sensitive. So the magnet-free machines that
+# matter most for Europe -- Valeo, MAHLE, ZF -- are exactly the ones with no
+# public mass, and no amount of further searching changes that.
+#
+# What they DO establish, and it is not nothing: hairpin stators, combined
+# water and oil cooling, 800 V, and brushless excitation are all in
+# production or near it, which is direct evidence for the mechanisms in
+# METHODOLOGY.md 4.2 and 4.3.
 
 
-def machines() -> pd.DataFrame:
-    """The manufacturer data sheets, one row per machine."""
-    return pd.DataFrame(MACHINES)
+def machines(include_wheel: bool = False) -> pd.DataFrame:
+    """
+    The manufacturer data sheets, one row per machine.
+
+    `include_wheel` adds the in-wheel machines, whose torque is WHEEL torque
+    and therefore not comparable with the motor torque everything else uses.
+    Off by default so that the unsafe comparison has to be asked for.
+    """
+    rows = list(MACHINES) + (list(WHEEL_MACHINES) if include_wheel else [])
+    frame = pd.DataFrame(rows)
+    if 'torque_is_wheel' not in frame.columns:
+        frame['torque_is_wheel'] = False
+    frame['torque_is_wheel'] = frame.torque_is_wheel.fillna(False)
+    return frame
 
 
 # ============================================================== 2 DRAWS
@@ -1132,14 +1183,12 @@ def figure_factors(params, out_path: str, current: pd.DataFrame = None) -> str:
                 continue
             block['torque'] = (block.torque_min + block.torque_max) / 2.0
 
-            # ⚠️ TWO POINTS CANNOT CARRY AN INTERCEPT. With few segments the
-            # fit is forced through the origin instead, which also states the
-            # physically honest thing: no torque, no active material.
-            if len(block) >= 4:
-                slope, intercept = np.polyfit(block.torque, block.meanValue, 1)
-            else:
-                slope = float((block.meanValue / block.torque).mean())
-                intercept = 0.0
+            # An intercept needs three points, not four: a machine of zero
+            # torque still has a shaft, end plates and a housing, so forcing
+            # the line through the origin asserts something false about every
+            # small machine. The induction fit has n=3 and gets an intercept
+            # like the others.
+            slope, intercept = np.polyfit(block.torque, block.meanValue, 1)
             span = np.linspace(0, block.torque.max() * 1.08, 40)
 
             for colour_year, year in zip(shades, show_years):
@@ -1330,6 +1379,7 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
     figure, axis = plt.subplots(figsize=(11, 6.4))
     colours = {'PMElectricMotors': '#8E44AD', 'EESMElectricMotors': '#2980B9',
                'IMandPMElectricMotors': '#16A085'}
+    slopes: dict[str, float] = {}
 
     for motor in params.run.motors:
         block = base[base.componentKeyLevel1 == motor].dropna(
@@ -1338,11 +1388,9 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
             continue
         block['torque'] = (block.torque_min + block.torque_max) / 2.0
         totals = block.groupby('torque')['meanValue'].sum()
-        if len(totals) >= 4:
-            slope, intercept = np.polyfit(totals.index, totals.values, 1)
-        else:
-            slope = float(np.mean(totals.values / np.asarray(totals.index, dtype=float)))
-            intercept = 0.0
+        slope, intercept = np.polyfit(np.asarray(totals.index, dtype=float),
+                                      totals.values, 1)
+        slopes[motor] = slope
         span = np.linspace(0, max(totals.index) * 1.05, 40)
         colour = colours.get(motor, '#7F8C8D')
         axis.plot(span, intercept + slope * span, lw=2.4, color=colour,
@@ -1352,10 +1400,40 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
                   mec=colour, mew=1.5, ls='none')
 
     # ---- the axial machines, from the manufacturer ----------------------
+    # ⚠️ ONE POINT CANNOT CARRY A SLOPE. YASA publishes a single machine, so
+    # a line through it has to borrow its slope from somewhere. It borrows the
+    # MEAN OF THE RADIAL SLOPES: the assumption is that an axial machine needs
+    # material in proportion to torque the same way a radial one does, and
+    # only starts from a lower level. That is an assumption, not a
+    # measurement, and it is why the line is dashed.
     spec = machines()
-    for index, (_, row) in enumerate(spec.iterrows()):
+    borrowed = float(np.mean(list(slopes.values()))) if slopes else 0.0
+    for _, row in spec.iterrows():
         axis.plot([row.torque_peak], [row.mass_kg], marker='*', ms=20,
                   color='#C0392B', mec='white', mew=1.2, ls='none', zorder=8)
+    if len(spec) and borrowed:
+        # Through the housed machine, which is the like-for-like one.
+        housed = spec.loc[spec.mass_kg.idxmax()]
+        offset = float(housed.mass_kg) - borrowed * float(housed.torque_peak)
+        # ⚠️ THE BORROWED SLOPE GIVES A NEGATIVE INTERCEPT, and that is the
+        # assumption failing rather than a drawing problem: carried down to
+        # zero torque it asserts a machine of negative mass. A radial motor's
+        # intercept is its shaft, end plates and housing, and an axial machine
+        # at this torque simply has less of all of it -- so the radial slope
+        # cannot also be the axial one all the way down. The line is drawn
+        # ONLY UPWARDS from the one machine that was measured, where the
+        # assumption is an extrapolation rather than a contradiction.
+        top = float(base.assign(
+            t=(base.torque_min + base.torque_max) / 2).t.max()) * 1.05
+        span = np.linspace(float(housed.torque_peak), top, 40)
+        axis.plot(span, offset + borrowed * span, lw=2.2, color='#C0392B',
+                  ls='--',
+                  label='Axialfluss, Steigung der radialen übernommen '
+                        f'(ab {housed.torque_peak:.0f} Nm, Annahme)')
+        axis.annotate(f'unterhalb {-offset / borrowed:.0f} Nm ergäbe diese\n'
+                      f'Annahme negative Masse \u2014 sie trägt nur nach oben',
+                      xy=(top * 0.52, offset + borrowed * top * 0.52 - 16),
+                      fontsize=8, color='#C0392B', ha='left', style='italic')
     # One label for the pair: the two machines differ only by their housing,
     # and two overlapping callouts at the same torque read as one smudge.
     if len(spec):
@@ -1365,11 +1443,11 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
             'YASA P400, Axialfluss\n'
             f'{low:.0f} kg Kartusche / {high:.1f} kg mit Gehäuse\n'
             f'{torque:.0f} Nm Spitze, ölgekühlt, 800 V',
-            xy=(torque, high), xytext=(torque + 60, high + 26),
+            xy=(torque, high), xytext=(torque - 150, high + 42),
             fontsize=9, color='#C0392B', va='center',
             arrowprops=dict(arrowstyle='->', color='#C0392B', lw=1.4))
     axis.plot([], [], marker='*', ms=15, color='#C0392B', ls='none',
-              label='Axialfluss, YASA Datenblatt (Gesamtmaschine)')
+              label='YASA P400, Datenblatt (Gesamtmaschine)')
 
     axis.set_xlabel('Drehmoment [Nm]')
     axis.set_ylabel('Masse ohne Getriebe [kg]\n'
@@ -1378,9 +1456,9 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
     axis.set_ylim(0, None)
     axis.grid(alpha=0.22, lw=0.6)
     axis.legend(fontsize=9, framealpha=0.95, loc='upper left')
-    axis.set_title('Topologien bei gleichem Drehmoment, Stand 2020\n'
-                   'Der Axialflussmotor wiegt als GANZE Maschine weniger als '
-                   'die Aktivteile einer radialen gleichen Drehmoments',
+    axis.set_title('Topologien bei gleichem MOTOR-Drehmoment, Stand 2020\n'
+                   'Die ganze Axialflussmaschine wiegt weniger als die '
+                   'Aktivteile einer radialen gleichen Drehmoments',
                    fontsize=12)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
