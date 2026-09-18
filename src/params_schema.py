@@ -400,12 +400,20 @@ class RunParams:
     #      above 1200 Nm     17 models    1.2%
     #      above 1500 Nm      6 models    0.4%
     #
-    #  Above 1200 Nm there are seventeen models, and they are AMG GT,
-    #  Lucid Air Sapphire, Porsche Cayenne Turbo -- performance cars whose
-    #  motors are not what the rest of the fleet is made of, and whose
-    #  numbers would be carried by a grid point with almost nothing behind
-    #  it. 1200 Nm covers 98.8% of the models and stays below the highest
-    #  point any segment fit actually rests on, which is 1350 Nm.
+    #  ⚠️ AND THE REAL REASON IS NOT RARITY. Matthias 2026-09-18: above
+    #  1200 Nm those are SEVERAL MOTORS, not one all-wheel drive. The
+    #  implied power per machine says the same thing -- median 348 kW per
+    #  assumed motor between 1200 and 1500 Nm, up to 460 kW above it,
+    #  against 150-242 kW below 1200. Nobody builds a 430 kW traction
+    #  machine, so the Lucid Air Sapphire is three motors and the
+    #  Lightyear 0 is four in-wheel motors reporting wheel torque.
+    #
+    #  Up there the per-motor arithmetic this project rests on is wrong,
+    #  which is a stronger reason to stop than the seventeen models being
+    #  AMG GT, Lucid and Porsche Cayenne Turbo. 1200 Nm covers 98.8% of
+    #  models, keeps the assumption intact -- only 2% of models below it
+    #  exceed 300 kW per assumed motor -- and stays below 1350 Nm, the
+    #  highest point any segment fit actually rests on.
     #
     #  Going lower is defensible too: 1000 Nm covers 96.3%. Going higher
     #  is not, because past 1350 Nm every value is extrapolation with no

@@ -167,8 +167,30 @@ def fleet(path: str) -> pd.DataFrame:
         'segment': frame.miscellaneous_segment.str.split(' - ').str[0].str.strip(),
         'drive': frame.performance_drive,
     })
+    # ⚠️ AWD = 2 IS AN ASSUMPTION AND IT BREAKS ABOVE ABOUT 1200 Nm.
+    # Matthias 2026-09-18: more than 1200 Nm is several motors, not one AWD.
+    # The file only records a drive layout, never a motor count, so the
+    # assumption cannot be read out of it -- but it can be tested through the
+    # power it implies per machine:
+    #
+    #     up to  600 Nm   median 150 kW per assumed motor
+    #      600- 900 Nm    median 174 kW
+    #      900-1200 Nm    median 242 kW
+    #     1200-1500 Nm    median 348 kW, up to 425
+    #     above 1500 Nm   up to 460 kW
+    #
+    # 430 kW out of one traction machine is not a machine anybody builds, so
+    # the Lucid Air Sapphire at 920 kW is three motors and not two, and the
+    # Lightyear 0 at 1720 Nm and 130 kW is four in-wheel motors reporting
+    # WHEEL torque. Below 1200 Nm only 2% of models exceed 300 kW per assumed
+    # motor and the assumption holds.
+    #
+    # This is the real reason run.torque_grid stops at 1200 Nm: not that the
+    # vehicles above it are rare, but that up there the per-motor arithmetic
+    # this project rests on is simply wrong.
     out['motors'] = frame.performance_drive.map(
         {'Front': 1, 'Rear': 1, 'AWD': 2})
+    out['motor_count_doubtful'] = (out.power_kw / out.motors) > 300
 
     def first_year(value):
         try:
