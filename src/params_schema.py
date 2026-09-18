@@ -470,14 +470,49 @@ class RunParams:
     spec_composition: dict[str, dict] = field(default_factory=lambda: {
         'axialFluxPMElectricMotors': dict(
             anchor='YASA P400 C',
-            shares={},                      # <-- TO FILL
+            # DERIVED 2026-09-18 FROM YASA'S OWN PUBLISHED FACTORS, not
+            # invented, and every number traceable:
+            #   lamination  radial x0.20 -- the yokeless segmented armature
+            #               has no stator yoke; YASA states up to 80% less
+            #               stator iron, and gives 30 kg -> 5 kg as its own
+            #               example
+            #   copper      radial x0.60 -- YASA: about 60% of the copper of
+            #               a radial machine of comparable power and torque
+            #   magnet      radial x0.80 -- YASA: about 80% of the magnet
+            #   aluminium   4.2 kg, MEASURED: P400 C 28.2 kg minus P400 R
+            #               24.0 kg is the housing, the same machine with and
+            #               without it
+            #   steel       the remainder of the 24 kg cartridge after the
+            #               active materials, so shaft and structure
+            # At 400 Nm that gives 7.15 + 4.19 + 1.99 = 13.33 kg of active
+            # material, 10.67 kg of structure and 4.2 kg of housing = 28.2 kg,
+            # which is the data sheet exactly.
+            #
+            # ⚠️ OVERWRITE THESE IF YOU HAVE BETTER NUMBERS. The three active
+            # factors are the maker's own; the split of the remaining 10.67 kg
+            # between shaft and structure is not stated anywhere.
+            shares={'lamination': 0.2536, 'copper': 0.1486,
+                    'magnet': 0.0705, 'steel': 0.3784,
+                    'aluminium': 0.1489},
             torque_slope_from='radial',
             note='Axial flux, oil cooled stator, 800 V. Yokeless segmented '
                  'armature: much less iron than a radial machine of the same '
                  'torque, and the magnets sit on two discs.'),
         'dualRotorRadialPMElectricMotors': dict(
             anchor='DeepDrive RM 1500',
-            shares={},                      # <-- TO FILL
+            # DERIVED 2026-09-18 FROM DEEPDRIVE'S OWN STATEMENT: the dual
+            # rotor uses 80% less iron and 50% less magnet material. Applied
+            # to the radial split and renormalised to the 32 kg data sheet.
+            #
+            # ⚠️ WEAKER THAN THE AXIAL ENTRY, in two ways. DeepDrive names no
+            # baseline for "80% less", so the radial PMSM at the same torque
+            # is this project's reading of it. And unlike YASA there is no
+            # second variant to measure the housing against, so the split of
+            # what is left between shaft and housing follows the radial
+            # ratio rather than a measurement.
+            shares={'lamination': 0.1947, 'copper': 0.1902,
+                    'magnet': 0.0339, 'steel': 0.0772,
+                    'aluminium': 0.504},
             torque_slope_from='radial',
             note='Dual rotor, stator between inner and outer rotor. The maker '
                  'states 80% less iron and 50% less magnet material, baseline '
