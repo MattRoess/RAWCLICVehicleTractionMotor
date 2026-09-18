@@ -42,7 +42,8 @@ ensure_venv()
 import pandas as pd                                        # noqa: E402
 
 from src.composition import (CITATION, apply_corrections,   # noqa: E402
-                             composition_by_torque, figure_by_torque,
+                             composition_by_torque, figure_all_types,
+                             figure_by_torque,
                              verify_by_torque,
                              audit, components, declared,
                              figure_critical, figure_factors,
@@ -242,6 +243,8 @@ def main() -> int:
         figure_topologies(current_year, params,
                           os.path.join(figures, '04_topologies.png')),
         figure_fleet(params, os.path.join(figures, '05_fleet_demand.png')),
+        figure_all_types(grid, params,
+                         os.path.join(figures, '07_all_motor_types.png')),
         figure_by_torque(grid, params,
                          os.path.join(figures, '06_composition_by_torque.png'),
                          corrected=corrected),

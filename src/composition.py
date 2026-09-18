@@ -1414,6 +1414,8 @@ MOTOR_LABEL = {
     'PMElectricMotors': 'PMSM  (Permanentmagnet)',
     'EESMElectricMotors': 'EESM  (fremderregt)',
     'IMandPMElectricMotors': 'IM + PM  (Asynchron)',
+    'axialFluxPMElectricMotors': 'Axialfluss  (YASA-Typ)',
+    'dualRotorRadialPMElectricMotors': 'Doppelrotor radial  (DeepDrive)',
 }
 
 
@@ -1684,7 +1686,7 @@ def figure_critical(frame: pd.DataFrame, params, out_path: str) -> str:
     return out_path
 
 
-def _regression_band(block: pd.DataFrame, params, span, draws: int = 5000):
+def _regression_band(block: pd.DataFrame, params, span, draws: int = 0):
     """
     A regression and its uncertainty band, from DRAWS rather than from formulae.
 
@@ -1699,10 +1701,10 @@ def _regression_band(block: pd.DataFrame, params, span, draws: int = 5000):
     `monte_carlo.within_motor_correlation`, for the reason given there: they
     are regressions on the same vehicle's torque and move together.
 
-    `draws` is lower than `monte_carlo.draws` because a regression is refitted
-    on every one of them. 5000 puts the Monte Carlo noise on the band edges
-    well below the band's own width.
+    `draws` defaults to `monte_carlo.draws`: the solve is batched, so the full
+    200,000 costs little more than a small sample would.
     """
+    draws = draws or params.monte_carlo.draws
     rng = np.random.default_rng(params.monte_carlo.seed)
     rho = params.monte_carlo.within_motor_correlation
 
@@ -1914,7 +1916,7 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
     years = years_wanted(params.run.years)
     rng = np.random.default_rng(params.monte_carlo.seed)
     rho = params.monte_carlo.within_motor_correlation
-    draws = 5000
+    draws = params.monte_carlo.draws
 
     # ⚠️ THE CORRECTED BASE FRAME, NOT THE TRAJECTORY. The trajectory already
     # holds one block per voltage class, and grouping it without the voltage
@@ -1977,19 +1979,34 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
         # exactly the uncertainty a fit on eleven points really has, and it
         # widens towards the ends of the range where there is least to hold
         # the line down.
-        design_full = np.column_stack([np.ones_like(torques), torques])
+        # ⚠️ VECTORISED, BECAUSE 200,000 DRAWS EACH REFIT A REGRESSION.
+        # A Python loop over the draws was fine at 5000 and is not at
+        # 200,000. The bootstrap fit is solved for every draw at once through
+        # the normal equations: build X'X and X'y per draw with einsum, then
+        # one batched solve. Same arithmetic, three orders of magnitude
+        # faster.
         picks = rng.integers(0, len(torques), size=(draws, len(torques)))
-        fitted = np.empty((draws, len(grid)))
-        for draw_index in range(draws):
-            columns = picks[draw_index]
-            design = design_full[columns]
-            values = sampled[draw_index, columns]
-            # A resample can land on a single torque; fall back to the mean.
-            if np.ptp(design[:, 1]) == 0:
-                fitted[draw_index] = values.mean()
-                continue
-            beta, *_ = np.linalg.lstsq(design, values, rcond=None)
-            fitted[draw_index] = beta[0] + beta[1] * grid
+        picked_torque = torques[picks]                       # (draws, n)
+        picked_value = np.take_along_axis(sampled, picks, axis=1)
+
+        design = np.stack([np.ones_like(picked_torque), picked_torque], axis=2)
+        gram = np.einsum('dni,dnj->dij', design, design)
+        moment = np.einsum('dni,dn->di', design, picked_value)
+
+        # A resample can land on one torque, leaving the system singular.
+        # Those draws fall back to the mean, which is what a single point
+        # supports.
+        spread = picked_torque.max(axis=1) - picked_torque.min(axis=1)
+        usable = spread > 0
+        beta = np.zeros((draws, 2))
+        if usable.any():
+            # moment must be a batch of COLUMN vectors, not one matrix.
+            beta[usable] = np.linalg.solve(
+                gram[usable], moment[usable][..., None])[..., 0]
+        if (~usable).any():
+            beta[~usable, 0] = picked_value[~usable].mean(axis=1)
+
+        fitted = beta[:, 0:1] + beta[:, 1:2] * grid[None, :]
 
         median = np.median(fitted, axis=0)
         low = np.percentile(fitted, 2.5, axis=0)
@@ -2085,6 +2102,23 @@ def _spec_by_torque(radial: pd.DataFrame, params: Params) -> pd.DataFrame:
         else:
             totals = float(slope) * grid
 
+        # ⚠️ THE INTERVAL, AND WHY IT IS NOT ZERO. A data sheet states one
+        # number, so there is no published interval -- which is not the same
+        # as no uncertainty. These are the least certain numbers here.
+        #
+        # Two parts, combined in quadrature. The borrowed SHAPE inherits the
+        # radial fit's own relative width at that torque, which already grows
+        # away from the radial data. The derived SHARES carry
+        # spec_share_uncertainty. Neither is measured, and both are declared.
+        radial_band = radial_total.groupby('torque_nm')[['meanValue', 'p025',
+                                                         'p975']].sum()
+        shape_rel = np.interp(
+            grid, radial_band.index,
+            ((radial_band.p975 - radial_band.p025) /
+             (2 * radial_band.meanValue)).values)
+        width = np.sqrt(shape_rel ** 2 +
+                        params.run.spec_share_uncertainty ** 2)
+
         for klass, share in entry['shares'].items():
             for volts, copper_factor in params.scenario.copper_mass.items():
                 voltage_scale = copper_factor if klass == 'copper' else 1.0
@@ -2101,10 +2135,8 @@ def _spec_by_torque(radial: pd.DataFrame, params: Params) -> pd.DataFrame:
                             'productionYear': year,
                             'voltageClass': volts,
                             'meanValue': totals[index] * scale,
-                            # A data sheet states one number and no interval,
-                            # so there is none to report. Not zero uncertainty
-                            # -- unstated uncertainty.
-                            'p025': np.nan, 'p975': np.nan,
+                            'p025': totals[index] * scale * (1 - width[index]),
+                            'p975': totals[index] * scale * (1 + width[index]),
                             'yearBasis': ('measured'
                                           if params.data.year_is_measured(year)
                                           else ('backcast'
@@ -2271,6 +2303,97 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
         'Punkte: Segmentwerte mit der angegebenen Massenunsicherheit',
         fontsize=11)
     figure.tight_layout(rect=(0, 0.07, 1, 1))
+    figure.savefig(out_path, dpi=160)
+    plt.close(figure)
+    return out_path
+
+
+def figure_all_types(grid: pd.DataFrame, params, out_path: str,
+                     corrected: pd.DataFrame = None) -> str:
+    """
+    All five motor types against torque, each with its own uncertainty.
+
+    ⚠️ THE BANDS ARE MEANT TO BE LARGE WHERE THEY ARE LARGE. Matthias
+    2026-09-18: it is extrapolation, therefore the uncertainty ranges are
+    essential even if they turn out big. The two spec machines are built from
+    a single data sheet, so their band carries the borrowed shape's own width
+    plus `spec_share_uncertainty` on the derived split -- about +/-26-29%,
+    against +/-6-12% for the three fitted from eleven segments.
+
+    A star marks the one machine each spec type actually rests on. Everything
+    to either side of it is extrapolation from that single point.
+    """
+    import matplotlib.pyplot as plt
+
+    years = [params.scenario.base_year, 2045, 2070]
+    fades = [1.0, 0.6, 0.35]
+    motors = [m for m in params.run.motors if m in set(grid.componentKeyLevel1)]
+    sheets = machines().set_index('name')
+
+    figure, axes = plt.subplots(1, len(motors), figsize=(3.6 * len(motors), 5.4),
+                                sharex=True)
+    for axis, motor in zip(axes, motors):
+        block = grid[(grid.componentKeyLevel1 == motor) &
+                     (grid.voltageClass == params.scenario.base_voltage)]
+        fitted = motor not in params.run.spec_composition
+        colour = '#2C5F8A' if fitted else '#B5651D'
+
+        for fade, year in zip(fades, years):
+            rows = block[block.productionYear == year]
+            total = rows.groupby('torque_nm')[['meanValue', 'p025',
+                                               'p975']].sum()
+            axis.fill_between(total.index, total.p025, total.p975,
+                              color=colour, alpha=0.13 * fade, lw=0)
+            axis.plot(total.index, total.meanValue, lw=2.2, color=colour,
+                      alpha=fade, label=str(year))
+
+        base = block[block.productionYear == params.scenario.base_year]
+        total = base.groupby('torque_nm')[['meanValue', 'p025', 'p975']].sum()
+        width = float(((total.p975 - total.p025) /
+                       (2 * total.meanValue)).mean())
+
+        if not fitted:
+            anchor_name = params.run.spec_composition[motor]['anchor']
+            if anchor_name in sheets.index:
+                anchor = sheets.loc[anchor_name]
+                axis.plot([anchor.torque_shaft], [anchor.mass_kg], marker='*',
+                          ms=17, color='#C0392B', mec='white', mew=1.1,
+                          zorder=9)
+                axis.annotate(f'{anchor_name}\n{anchor.mass_kg:.0f} kg',
+                              xy=(float(anchor.torque_shaft),
+                                  float(anchor.mass_kg)),
+                              xytext=(-6, 12), textcoords='offset points',
+                              fontsize=7.4, color='#C0392B', ha='right')
+        # ⚠️ THE COUNT IS READ, NOT WRITTEN. An earlier version printed
+        # "11 Segmente" for every fitted type, which is wrong for the
+        # induction configuration -- it appears in three segments only, and
+        # that is exactly why its band is enormous.
+        count = int(base.n_segments.max()) if 'n_segments' in base else 0
+        source = (f'{count} Segmente' if fitted else '1 Datenblatt')
+        warn = '  \u26a0' if fitted and count < 5 else ''
+        axis.set_title(f'{MOTOR_LABEL.get(motor, motor)}\n'
+                       f'{source}   \u00b1{width:.0%}{warn}', fontsize=9.5)
+        if fitted and count < 5:
+            axis.annotate('Bootstrap auf wenigen Punkten:\n'
+                          'die Steigung ist kaum bestimmt',
+                          xy=(0.5, 0.03), xycoords='axes fraction',
+                          fontsize=7.6, ha='center', color='#A93226',
+                          style='italic')
+            # Keep the panel readable; the band's own number is in the title.
+            axis.set_ylim(0, float(total.meanValue.max()) * 2.2)
+        axis.set_xlabel('Drehmoment [Nm]')
+        axis.set_ylim(bottom=0)
+        axis.grid(alpha=0.22, lw=0.6)
+        axis.legend(fontsize=8, framealpha=0.95, loc='upper left', title='Jahr')
+
+    axes[0].set_ylabel('Masse je Fahrzeug [kg]')
+    figure.suptitle(
+        'Alle fünf Motortypen: Masse gegen Drehmoment, '
+        f'{params.scenario.base_voltage} V, kein Segment.\n'
+        f'Bänder: 95% aus {params.monte_carlo.draws:,} Monte-Carlo-Ziehungen.  '
+        'Blau: aus Segmenten gefittet.  Orange: aus EINEM Datenblatt, '
+        'Stern = die Maschine', fontsize=11)
+    figure.tight_layout()
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
     return out_path

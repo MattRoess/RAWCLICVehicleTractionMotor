@@ -519,6 +519,33 @@ class RunParams:
                  'unnamed. High torque at low speed, little or no reduction.'),
     })
 
+    # ⚠️ HOW UNCERTAIN A MACHINE BUILT FROM ONE DATA SHEET IS.
+    #
+    # A spec machine has no interval anywhere: a data sheet states one mass
+    # and the shares are derived. Reporting no uncertainty would say the
+    # opposite of the truth, because these are the LEAST certain numbers in
+    # the project, not the most.
+    #
+    # The uncertainty is assembled from two parts, and neither is measured:
+    #
+    #   1. THE SHAPE IS BORROWED, so it inherits the radial fit's own
+    #      relative uncertainty at that torque -- which already widens away
+    #      from where the radial data sits, and is computed rather than set.
+    #
+    #   2. THE SHARES ARE DERIVED, and `spec_share_uncertainty` is the
+    #      relative uncertainty on them. 0.25 says a share could be a
+    #      quarter out either way. For the axial machine three of the five
+    #      come from YASA's own factors and the housing is measured, so this
+    #      is pessimistic; for the dual rotor, where no baseline is named
+    #      for "80% less", it may be optimistic.
+    #
+    # The two are combined in quadrature, and the result grows with distance
+    # from the anchor because part 1 does. At the anchor it is about a
+    # quarter; far from it, much more -- which is the point Matthias made:
+    # the ranges must be there even when they are large.
+    # SAFE TO CHANGE: yes.
+    spec_share_uncertainty: float = 0.25
+
     # THE VEHICLE SEGMENTS, as `productKeyLevel3` spells them. A-F are the
     # passenger segments and JB-JF the light commercial ones. Empty means all
     # eleven the dataset carries.
@@ -956,6 +983,11 @@ class Params:
             if slope != 'radial' and not isinstance(slope, (int, float)):
                 issues.append(f'{where}["torque_slope_from"] is {slope!r}; it '
                               f"has to be 'radial' or a number in kg per Nm")
+
+        if not 0.0 <= self.run.spec_share_uncertainty < 2.0:
+            issues.append(f'run.spec_share_uncertainty is '
+                          f'{self.run.spec_share_uncertainty}; it is a '
+                          f'relative uncertainty and has to lie in [0, 2)')
 
         if not _GRID.fullmatch((self.run.torque_grid or '').strip()):
             issues.append(f'run.torque_grid is {self.run.torque_grid!r}. It '
