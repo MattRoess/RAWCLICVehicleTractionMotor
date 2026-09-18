@@ -201,6 +201,7 @@ MACHINES = [
     # --- axial flux, shaft machines --------------------------------------
     dict(name='YASA P400 R', topology='axialFluxPM', maker='YASA (Mercedes-Benz)',
          mass_kg=24.0, mass_basis='cartridge, dry, no housing, no gearbox',
+         scope='active', scope_certain=True,
          torque_shaft=370.0, torque_continuous=200.0,
          power_peak_kw=160.0, speed_max_rpm=8000,
          gearbox_kg=None, gearbox='none in the data sheet',
@@ -209,6 +210,7 @@ MACHINES = [
          url='yasa.com'),
     dict(name='YASA P400 C', topology='axialFluxPM', maker='YASA (Mercedes-Benz)',
          mass_kg=28.2, mass_basis='with housing, dry, no gearbox',
+         scope='motor', scope_certain=True,
          torque_shaft=370.0, torque_continuous=200.0,
          power_peak_kw=160.0, speed_max_rpm=8000,
          gearbox_kg=None, gearbox='none in the data sheet',
@@ -217,6 +219,7 @@ MACHINES = [
          url='yasa.com'),
     dict(name='Equipmake APM-200', topology='axialFluxPM', maker='Equipmake',
          mass_kg=42.0, mass_basis='motor only, gearbox and inverter separate',
+         scope='motor', scope_certain=True,
          torque_shaft=450.0, torque_continuous=None,
          power_peak_kw=220.0, speed_max_rpm=10000,
          gearbox_kg=9.0, gearbox='integrated 5.5:1 epicyclic, 2475 Nm at the '
@@ -234,6 +237,7 @@ MACHINES = [
     # plus reduction, or compare nothing.
     dict(name='DeepDrive RM 1500', topology='dualRotorRadialPM',
          maker='DeepDrive', mass_kg=32.0, mass_basis='motor',
+         scope='motor', scope_certain=False,
          torque_shaft=1500.0, torque_continuous=None,
          power_peak_kw=150.0, speed_max_rpm=None,
          gearbox_kg=None, gearbox='little or none, high torque low speed',
@@ -242,6 +246,7 @@ MACHINES = [
          url='deepdrive.tech'),
     dict(name='DeepDrive RM 1800', topology='dualRotorRadialPM',
          maker='DeepDrive', mass_kg=35.0, mass_basis='motor',
+         scope='motor', scope_certain=False,
          torque_shaft=1800.0, torque_continuous=None,
          power_peak_kw=180.0, speed_max_rpm=None,
          gearbox_kg=None, gearbox='little or none, high torque low speed',
@@ -250,6 +255,7 @@ MACHINES = [
          url='deepdrive.tech'),
     dict(name='DeepDrive RM 2400', topology='dualRotorRadialPM',
          maker='DeepDrive', mass_kg=37.0, mass_basis='motor',
+         scope='motor', scope_certain=False,
          torque_shaft=2400.0, torque_continuous=None,
          power_peak_kw=250.0, speed_max_rpm=None,
          gearbox_kg=None, gearbox='little or none; also offered in-wheel',
@@ -257,12 +263,36 @@ MACHINES = [
          source='DeepDrive RM series', url='deepdrive.tech'),
     dict(name='Donut Lab 21" hypercar', topology='axialFluxPM in-wheel',
          maker='Donut Lab', mass_kg=40.0, mass_basis='whole in-wheel motor',
+         scope='motor', scope_certain=False,
          torque_shaft=4300.0, torque_continuous=None,
          power_peak_kw=630.0, speed_max_rpm=None,
          gearbox_kg=0.0, gearbox='none, direct drive in the wheel',
          cooling=None, voltage=None,
          source='Donut Lab motor family, CES 2025', url='donutlab.com/motor/'),
 ]
+
+# ⚠️ THE SCOPES ARE NOT THE SAME, AND SOME ARE NOT KNOWN.
+# Matthias 2026-09-18: APM-200 and YASA might not include the same components.
+# He is right, and the difference is large enough to change the comparison.
+#
+#   YASA P400 R   24.0 kg  CARTRIDGE, explicitly without a housing
+#   YASA P400 C   28.2 kg  with housing -- the same machine, +4.2 kg (+18%)
+#   APM-200       42.0 kg  "motor", with gearbox (9 kg) and inverter (12 kg)
+#                          listed separately, so the housing is inside it
+#   DeepDrive     32-37 kg "motor", scope NOT STATED
+#   Donut Lab     40.0 kg  "in-wheel motor", scope NOT STATED, and an in-wheel
+#                          machine's boundary against hub, bearing and brake
+#                          is exactly where the kilograms hide
+#
+# `scope` says what is in the number and `scope_certain` says whether the
+# source said so. ONLY 'motor' WITH scope_certain COMPARES LIKE FOR LIKE --
+# which today is YASA P400 C against Equipmake APM-200, 28.2 kg at 370 Nm
+# against 42.0 kg at 450 Nm. Everything else is drawn, and marked.
+#
+# ⚠️ AND NONE OF THEM IS THE RADIAL SCOPE EITHER. The consolidated stack this
+# is compared against is stator, rotor, windings, magnets, shaft and housing,
+# summed over every motor in the vehicle -- so a single-machine data sheet
+# belongs beside a single-machine share of it, not beside the vehicle total.
 
 # ⚠️ DEEPDRIVE ALSO STATES A MATERIAL CLAIM, and it is the only one of these
 # sources that does: the dual rotor uses **80% less iron and 50% less magnet
@@ -1715,10 +1745,13 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
 
         for topology, group in machines().groupby('topology'):
             marker, colour, label = styles.get(topology, ('s', '#555', topology))
-            axis.plot(group.torque_shaft, group.mass_kg, marker, ms=13,
-                      color=colour, mec='white', mew=1.1, ls='none', zorder=8,
-                      label=f'{label}, Herstellerangabe' if axis_index == 1
-                      else None)
+            for certain, part in group.groupby('scope_certain'):
+                axis.plot(part.torque_shaft, part.mass_kg, marker, ms=13,
+                          color=colour if certain else 'white',
+                          mec=colour, mew=1.8, ls='none', zorder=8,
+                          label=(f'{label}'
+                                 + ('' if certain else ', Umfang unklar')
+                                 if axis_index == 1 else None))
             for _, row in group.iterrows():
                 drop = -25 if str(row['name']).endswith('P400 R') else -11
                 axis.annotate(
@@ -1803,6 +1836,196 @@ def figure_fleet(params, out_path: str) -> str:
         'Median je Segment, nur wo mindestens 5 Modelle das Jahr tragen',
         fontsize=12)
     figure.tight_layout()
+    figure.savefig(out_path, dpi=160)
+    plt.close(figure)
+    return out_path
+
+
+# ================================================= 8 COMPOSITION BY TORQUE
+# ======================================================================
+def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
+    """
+    The composition as a function of TORQUE and YEAR, with no segment in it.
+
+    ⚠️ SEGMENTS ARE HOW THE SOURCE WAS AGGREGATED, NOT WHAT DRIVES THE MASS.
+    Matthias 2026-09-18. A segment is a market category: it says what kind of
+    car it is, not what the motor has to do. The same segment holds 180 Nm and
+    600 Nm cars, and two cars in different segments with the same torque need
+    the same machine. So the segments are used to FIT the relationship and
+    then dropped.
+
+    For every configuration and every material, mass against torque is fitted
+    across the segments, and the fit is evaluated on `run.torque_grid` and
+    scaled by the year factor. The stock-and-flow model then asks for a torque
+    and a year and gets kilograms -- with no segment to decide and no question
+    about which segment a 2060 vehicle belongs to.
+
+    THE UNCERTAINTY IS DRAWN, as everywhere else: the fit is repeated on every
+    draw and the reported interval is the percentiles of the fitted values.
+
+    ⚠️ `n_segments` AND `torque_low`/`torque_high` TRAVEL WITH EVERY ROW. A
+    grid point outside the range the fit was made on is an extrapolation, and
+    the consumer has to be able to see that without re-deriving it.
+    """
+    from src.params_schema import years_wanted
+
+    grid = np.array(years_wanted(params.run.torque_grid), dtype=float)
+    years = years_wanted(params.run.years)
+    rng = np.random.default_rng(params.monte_carlo.seed)
+    rho = params.monte_carlo.within_motor_correlation
+    draws = 5000
+
+    # ⚠️ THE CORRECTED BASE FRAME, NOT THE TRAJECTORY. The trajectory already
+    # holds one block per voltage class, and grouping it without the voltage
+    # key silently adds the 400 V, 800 V and 1000 V variants of the same
+    # vehicle together -- which reported 313 kg at 500 Nm where the answer is
+    # about 104. A variant is an alternative, not a part. This function
+    # applies the voltage and the year itself, so it must be given the base.
+    if 'voltageClass' in frame.columns and frame.voltageClass.nunique() > 1:
+        raise ValueError(
+            'composition_by_torque expects the corrected base composition, '
+            'not the trajectory: it applies voltage and year itself, and a '
+            'frame carrying several voltage classes would be counted once per '
+            'class.')
+
+    frame = frame.copy()
+    if 'materialClass' not in frame.columns:
+        frame['materialClass'] = [material_class(row)
+                                  for _, row in frame.iterrows()]
+
+    material = frame[frame.parameterCode == params.data.material_of_component]
+    rows: list[dict] = []
+
+    keys = ['componentKeyLevel1', 'componentKeyLevel2', 'componentKeyLevel3',
+            'materialKeyLevel1', 'materialClass']
+    for key, block in material.groupby(keys, dropna=False):
+        block = block.dropna(subset=['meanValue', 'torque_min']).copy()
+        if block.empty:
+            continue
+        block['torque'] = (block.torque_min + block.torque_max) / 2.0
+        points = block.groupby('torque')['meanValue'].mean()
+        if len(points) < 3:
+            # Two points cannot carry a slope and an intercept with any
+            # confidence. Reported as a constant, and said so.
+            continue
+
+        torques = np.asarray(points.index, dtype=float)
+        shock = rng.standard_normal(draws)
+        sampled = np.zeros((draws, len(torques)))
+        for index, torque in enumerate(torques):
+            for _, row in block[block.torque == torque].iterrows():
+                if pd.isna(row.p025) or row.p975 == row.p025:
+                    sampled[:, index] += float(row.meanValue)
+                else:
+                    values, _ = _draw(row.meanValue, row.p025, row.p975,
+                                      draws, rng, correlated_with=shock,
+                                      correlation=rho)
+                    sampled[:, index] += values
+
+        design = np.column_stack([np.ones_like(torques), torques])
+        beta = sampled @ (design @ np.linalg.inv(design.T @ design))
+        fitted = beta[:, 0:1] + beta[:, 1:2] * grid[None, :]     # (draws, grid)
+
+        median = np.median(fitted, axis=0)
+        low = np.percentile(fitted, 2.5, axis=0)
+        high = np.percentile(fitted, 97.5, axis=0)
+
+        motor, component, sub, material_key, klass = key
+        for volts, copper_factor in params.scenario.copper_mass.items():
+            voltage_scale = (copper_factor
+                             if (klass == 'copper' and component == 'stator')
+                             else 1.0)
+            for year in years:
+                scale = factor(year, klass, params) * voltage_scale
+                for index, torque in enumerate(grid):
+                    rows.append({
+                        'componentKeyLevel1': motor,
+                        'componentKeyLevel2': component,
+                        'componentKeyLevel3': sub,
+                        'materialKeyLevel1': material_key,
+                        'materialClass': klass,
+                        'torque_nm': torque,
+                        'productionYear': year,
+                        'voltageClass': volts,
+                        'meanValue': max(0.0, median[index] * scale),
+                        'p025': max(0.0, low[index] * scale),
+                        'p975': max(0.0, high[index] * scale),
+                        'yearBasis': ('measured'
+                                      if params.data.year_is_measured(year)
+                                      else ('backcast'
+                                            if year < params.scenario.base_year
+                                            else 'projected')),
+                        'n_segments': len(torques),
+                        'torque_low': torques.min(),
+                        'torque_high': torques.max(),
+                        'extrapolated': bool(torque < torques.min()
+                                             or torque > torques.max()),
+                    })
+
+    return pd.DataFrame(rows)
+
+
+def figure_by_torque(grid: pd.DataFrame, params, out_path: str) -> str:
+    """
+    Composition against torque, one panel per year.
+
+    ⚠️ NO SEGMENT ANYWHERE. This is the figure the stock-and-flow model's
+    input actually looks like: give it a torque and a year, read off the
+    kilograms. The segments were used to fit the relationship and dropped.
+
+    Shaded to the right of the fitted range, because a grid point beyond the
+    torques the segments covered is an extrapolation and the figure should say
+    so rather than let the reader assume otherwise.
+    """
+    import matplotlib.pyplot as plt
+
+    motor = 'PMElectricMotors'
+    years = [params.scenario.base_year, 2040, 2070]
+    block = grid[(grid.componentKeyLevel1 == motor) &
+                 (grid.voltageClass == params.scenario.base_voltage)]
+    if block.empty:
+        raise ValueError(f'no rows for {motor}')
+
+    figure, axes = plt.subplots(1, len(years), figsize=(5.1 * len(years), 5.4),
+                               sharey=True)
+    high = float(block.torque_high.max())
+
+    for axis, year in zip(axes, years):
+        rows = block[block.productionYear == year]
+        pivot = rows.pivot_table(index='torque_nm', columns='materialClass',
+                                 values='meanValue', aggfunc='sum').fillna(0.0)
+        order = [k for k in MATERIAL_COLOUR if k in pivot.columns]
+        axis.stackplot(pivot.index, *[pivot[k] for k in order],
+                       colors=[MATERIAL_COLOUR[k] for k in order],
+                       labels=[MATERIAL_LABEL[k] for k in order], alpha=0.92)
+        axis.axvspan(high, pivot.index.max(), color='#000000', alpha=0.07, lw=0)
+        axis.plot(pivot.index, pivot.sum(axis=1), color='#222222', lw=1.4)
+
+        total_500 = float(pivot.sum(axis=1).reindex([500.0]).iloc[0])
+        axis.annotate(f'{total_500:.0f} kg\nbei 500 Nm', xy=(500, total_500),
+                      xytext=(-4, 12), textcoords='offset points',
+                      fontsize=9, weight='bold', ha='right')
+        axis.plot([500], [total_500], 'o', ms=7, color='#C0392B', zorder=9)
+
+        basis = rows.yearBasis.iloc[0]
+        axis.set_title(f'{year}  ({basis})', fontsize=11.5)
+        axis.set_xlabel('Drehmoment [Nm]')
+        axis.grid(alpha=0.22, lw=0.6)
+
+    axes[0].set_ylabel('kg je Fahrzeug')
+    axes[-1].annotate('grau: jenseits der\nangepassten Spanne',
+                      xy=(high * 1.02, 8), fontsize=8, color='#666666',
+                      style='italic')
+    handles, labels = axes[0].get_legend_handles_labels()
+    figure.legend(handles, labels, loc='lower center', ncol=5, fontsize=9,
+                  frameon=False, bbox_to_anchor=(0.5, -0.012))
+    figure.suptitle(
+        'Zusammensetzung als Funktion des Drehmoments, je Jahr \u2014 '
+        f'{MOTOR_LABEL.get(motor, motor)}, {params.scenario.base_voltage} V.  '
+        'Kein Segment.\n'
+        'Eingang für Stock-and-Flow: Drehmoment und Jahr hinein, '
+        'Kilogramm heraus', fontsize=11.5)
+    figure.tight_layout(rect=(0, 0.055, 1, 1))
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
     return out_path

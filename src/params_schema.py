@@ -369,6 +369,29 @@ class RunParams:
         'dualRotorRadialPMElectricMotors': 'spec',
     })
 
+    # ******************************************************************
+    #  THE TORQUE GRID THE COMPOSITION IS REPORTED ON.
+    #
+    #  ⚠️ THE COMPOSITION IS A FUNCTION OF TORQUE, NOT OF SEGMENT.
+    #  Matthias 2026-09-18. A segment is a market category -- it says what
+    #  kind of car it is, not what the motor has to do. Two cars in
+    #  different segments with the same torque need the same machine, and
+    #  the same segment holds 180 Nm and 600 Nm cars side by side.
+    #
+    #  Segments are how the SOURCE happened to be aggregated, and they are
+    #  used to fit the relationship and then dropped. The output is
+    #  reported on this grid, so the stock-and-flow model asks for a
+    #  torque and a year and gets a composition -- with no segment in the
+    #  way and no need to decide which segment a future vehicle is in.
+    #
+    #  '100-1500, 100' reads as: 100 Nm to 1500 Nm, every 100 Nm.
+    #  The fleet spans 113 to 2000 Nm of vehicle total torque, so this
+    #  grid covers the bulk of it without extrapolating into the handful
+    #  of extreme vehicles at the top.
+    #  SAFE TO CHANGE: yes.
+    # ******************************************************************
+    torque_grid: str = '100-1500, 100'
+
     # THE VEHICLE SEGMENTS, as `productKeyLevel3` spells them. A-F are the
     # passenger segments and JB-JF the light commercial ones. Empty means all
     # eleven the dataset carries.
@@ -784,6 +807,10 @@ class Params:
                           f'{self.monte_carlo.within_motor_correlation}; it is a '
                           f'correlation and has to lie in [0, 1]')
 
+        if not _GRID.fullmatch((self.run.torque_grid or '').strip()):
+            issues.append(f'run.torque_grid is {self.run.torque_grid!r}. It '
+                          f"reads like '100-1500, 100' -- first-last, step.")
+
         if not _YEARS.fullmatch((self.run.years or '').strip()):
             issues.append(f'run.years is {self.run.years!r}. It reads '
                           f"'2010-2070, 5', '2010-2070', or '2020'.")
@@ -794,6 +821,10 @@ class Params:
 # '2020', '2010-2070', or '2010-2070, 5'. Written once so the message above and
 # the reader cannot disagree about what is accepted.
 _YEARS = re.compile(r'\d{4}(\s*-\s*\d{4})?(\s*,\s*\d+)?')
+
+# The torque grid uses the same shape with no four-digit rule: torques are
+# three or four digits and the step is often 50 or 100.
+_GRID = re.compile(r'\d+(\s*-\s*\d+)?(\s*,\s*\d+)?')
 def current() -> Params:
     """
     The settings above, checked.
@@ -830,8 +861,9 @@ def describe(section, name: str) -> str:
 
 def years_wanted(spec: str) -> list[int]:
     """
-    The years `run.years` asks for.
+    The values a 'first-last, step' setting asks for.
 
+    Used for `run.years` and for `run.torque_grid`, which have the same shape.
     Written once, here, so that the settings file and every stage agree about
     what '2010-2070, 5' means.
     """

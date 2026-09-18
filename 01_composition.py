@@ -42,6 +42,7 @@ ensure_venv()
 import pandas as pd                                        # noqa: E402
 
 from src.composition import (CITATION, apply_corrections,   # noqa: E402
+                             composition_by_torque, figure_by_torque,
                              audit, components, declared,
                              figure_critical, figure_factors,
                              figure_fleet, figure_motor_mass,
@@ -182,6 +183,15 @@ def main() -> int:
         print(f'      {volts:>5} V   copper mass {ratio:.1%} of '
               f'{params.scenario.base_voltage} V')
 
+    _rule('Composition as a function of torque')
+    grid = composition_by_torque(corrected, params)
+    print(f'  {len(grid)} rows   '
+          f'{grid.torque_nm.nunique()} torque points '
+          f'{grid.torque_nm.min():.0f}-{grid.torque_nm.max():.0f} Nm   '
+          f'{grid.productionYear.nunique()} years   no segment')
+    print(f'  {int(grid.extrapolated.sum())} rows beyond the fitted torque '
+          f'range, flagged')
+
     _rule('Written')
     os.makedirs(params.output.data_dir, exist_ok=True)
     os.makedirs(params.output.figures_dir, exist_ok=True)
@@ -196,6 +206,7 @@ def main() -> int:
     corrected.to_csv(f'{out}.csv', index=False)
     current_year.to_csv(f'{out}_current.csv', index=False)
     series.to_csv(f'{out}_trajectory.csv', index=False)
+    grid.to_csv(f'{out}_by_torque.csv', index=False)
     with pd.ExcelWriter(f'{out}.xlsx', engine='openpyxl') as writer:
         current_year.to_excel(writer, sheet_name='composition_current',
                               index=False)
@@ -221,6 +232,8 @@ def main() -> int:
         figure_topologies(current_year, params,
                           os.path.join(figures, '04_topologies.png')),
         figure_fleet(params, os.path.join(figures, '05_fleet_demand.png')),
+        figure_by_torque(grid, params,
+                         os.path.join(figures, '06_composition_by_torque.png')),
     ]
 
     print(f'  {out}.xlsx              {len(current_year)} rows, '
@@ -228,6 +241,7 @@ def main() -> int:
     print(f'  {out}_current.csv       {len(current_year)} rows, '
           f'{len(params.scenario.copper_mass)} voltage classes')
     print(f'  {out}_trajectory.csv    {len(series)} rows')
+    print(f'  {out}_by_torque.csv     {len(grid)} rows, no segment')
     print(f'  {audit_path}')
     for path in made:
         print(f'  {path}')
