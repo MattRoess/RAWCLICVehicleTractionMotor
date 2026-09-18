@@ -270,6 +270,28 @@ here and nowhere else.
 after correction, and that is correct: marking a defect is not fixing it. The
 audit still reports it, and it is the one blocking finding left.
 
+### Open: the topologies may be too similar to each other
+
+At 500 Nm the consolidated dataset gives, for the rotor lamination stack,
+**PMSM 15.4 kg, EESM 16.5 kg, IM 16.7 kg** — the induction machine 8% above
+the permanent-magnet one.
+
+Drexler measures **PMSM 10.11 kg, EESM 11.34 kg, IM 13.75 kg** — the induction
+machine **36%** above, and he gives the reason: the IM rotor has a larger outer
+diameter and only small recesses at its radius, where PMSM and EESM stacks have
+large cut-outs.
+
+**This cannot be resolved from what is in hand.** Drexler's averages are not
+torque-normalised and he publishes no torque per topology, so part of his 36%
+may be that the induction machines in his sample are simply bigger. But part of
+it is geometry he describes directly, and the consolidated regression may be
+flattening real differences between the topologies because it fits them all
+with the same torque relationship.
+
+⚠️ **It matters for the whole point of the project.** If topology differences
+are understated, then a scenario in which the fleet moves away from permanent
+magnets shows too small a change in everything except the magnet itself.
+
 ### Two independent lines of evidence against this mass
 
 1. **Drexler Fig. 30b** — total rotor copper **3.68 kg** (2.86–4.45 over 9 EESM

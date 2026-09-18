@@ -1019,30 +1019,34 @@ def _mark_measured(axis, params, years):
     axis.axvline(last, color='#C0392B', lw=1.0, alpha=0.5, zorder=1)
 
 
+MOTOR_LABEL = {
+    'PMElectricMotors': 'PMSM  (Permanentmagnet)',
+    'EESMElectricMotors': 'EESM  (fremderregt)',
+    'IMandPMElectricMotors': 'IM + PM  (Asynchron)',
+}
+
+
 def figure_factors(params, out_path: str, current: pd.DataFrame = None) -> str:
     """
-    Mass against TORQUE, with one curve per year.
+    Mass against torque, one row per MOTOR TYPE, one curve per year.
 
-    ⚠️ MASS OVER TIME IS THE WRONG AXIS, and the earlier versions of this
-    figure had it. Component mass is set by how much torque the machine has to
-    produce: 125 Nm needs 10.8 kg of stator lamination and 868 Nm needs
-    34.5 kg. Plotting those against the year shows the spread between VEHICLE
-    SEGMENTS and buries the thing the project is about, which is that the same
-    torque needs less material as time passes.
+    ⚠️ ONE REGRESSION FOR ALL TOPOLOGIES IS WRONG, and an earlier version did
+    that. The three machines do not put their mass in the same places: an EESM
+    carries a wound rotor field instead of magnets, an induction rotor carries
+    a cage, and Drexler measures the difference directly -- rotor lamination
+    averages 13.75 kg for IM, 11.34 kg for EESM and 10.11 kg for PMSM. Fitting
+    them together produces a line describing no machine that exists.
 
-    So torque goes on the x axis and the years become a family of curves. The
-    curves move DOWN, and the vertical distance between them is the whole
-    claim: same torque, less material.
-
-    The points are the measured segment values at the base year, at the
-    midpoint of each segment's torque range. The regression through them is
-    this project's own fit -- the consolidated dataset was built by exactly
-    this kind of fit through Drexler's machines, so the line is drawn the way
-    the data was made.
+    So each topology gets its own fit, its own points and its own family of
+    year curves. What can then be compared across a row is the SLOPE: how many
+    grams of a material each machine needs per Nm of torque.
     """
     import matplotlib.pyplot as plt
 
-    panels = [
+    if current is None:
+        raise ValueError('figure_factors needs the current composition')
+
+    columns = [
         ('Stator-Blechpaket', 'lamination',
          lambda f: f.componentKeyLevel3 == 'statorSheetLaminationStack'),
         ('Stator-Wicklung (Kupfer)', 'copper',
@@ -1051,69 +1055,100 @@ def figure_factors(params, out_path: str, current: pd.DataFrame = None) -> str:
         ('Rotor-Blechpaket', 'lamination',
          lambda f: f.componentKeyLevel3 == 'rotorSheetLaminationStack'),
     ]
-    show_years = [y for y in (params.scenario.base_year, 2030, 2050, 2070)]
-    shades = ['#1a1a1a', '#4a6fa5', '#7aa6c2', '#a9c9d8']
-    markers = {'PMElectricMotors': 'o', 'EESMElectricMotors': 's',
-               'IMandPMElectricMotors': 'D'}
-
-    figure, axes = plt.subplots(1, 3, figsize=(15.5, 5.6))
-    if current is None:
-        raise ValueError('figure_factors needs the current composition')
+    show_years = [params.scenario.base_year, 2030, 2050, 2070]
+    shades = ['#1a1a1a', '#4a6fa5', '#7aa6c2', '#b3cede']
+    # A torque every one of the three topologies actually covers, so the
+    # comparison is an interpolation for all of them and an extrapolation for
+    # none.
+    REFERENCE_TORQUE = 500.0
 
     base = current[(current.voltageClass == params.scenario.base_voltage) &
                    (current.productionYear == params.scenario.base_year) &
                    (current.parameterCode == params.data.material_of_component)]
+    motors = [m for m in params.run.motors if m in set(base.componentKeyLevel1)]
 
-    for axis, (title, klass, picker) in zip(axes, panels):
-        rows = picker(base) & base.torque_min.notna() & base.meanValue.notna()
-        block = base[rows].copy()
-        block['torque'] = (block.torque_min + block.torque_max) / 2.0
-        if block.empty:
-            continue
+    figure, axes = plt.subplots(len(motors), len(columns),
+                                figsize=(5.1 * len(columns), 3.5 * len(motors)),
+                                squeeze=False)
 
-        # The fit through the measured points, at the base year. Least squares
-        # on mass against torque -- an intercept is allowed because a machine
-        # of zero torque still has a shaft and end plates.
-        slope, intercept = np.polyfit(block.torque, block.meanValue, 1)
-        span = np.linspace(block.torque.min() * 0.9, block.torque.max() * 1.05, 50)
+    for row_index, motor in enumerate(motors):
+        for column_index, (title, klass, picker) in enumerate(columns):
+            axis = axes[row_index][column_index]
+            colour = MATERIAL_COLOUR[klass]
 
-        for colour, year in zip(shades, show_years):
-            scale = (factor(year, klass, params) /
-                     factor(params.scenario.base_year, klass, params))
-            axis.plot(span, (intercept + slope * span) * scale, lw=2.2,
-                      color=colour, label=str(year), zorder=4)
+            block = base[(base.componentKeyLevel1 == motor) & picker(base) &
+                         base.torque_min.notna() & base.meanValue.notna()].copy()
+            if block.empty:
+                axis.text(0.5, 0.5, 'keine Daten', ha='center', va='center',
+                          transform=axis.transAxes, fontsize=9, color='#999999')
+                axis.set_xticks([])
+                axis.set_yticks([])
+                continue
+            block['torque'] = (block.torque_min + block.torque_max) / 2.0
 
-        for motor, group in block.groupby('componentKeyLevel1'):
-            axis.plot(group.torque, group.meanValue, markers.get(motor, 'o'),
-                      ms=6.5, mfc='white', mec=MATERIAL_COLOUR[klass], mew=1.5,
-                      ls='none', zorder=6,
-                      label=motor.replace('ElectricMotors', ''))
+            # ⚠️ TWO POINTS CANNOT CARRY AN INTERCEPT. With few segments the
+            # fit is forced through the origin instead, which also states the
+            # physically honest thing: no torque, no active material.
+            if len(block) >= 4:
+                slope, intercept = np.polyfit(block.torque, block.meanValue, 1)
+            else:
+                slope = float((block.meanValue / block.torque).mean())
+                intercept = 0.0
+            span = np.linspace(0, block.torque.max() * 1.08, 40)
 
-        # What the same torque costs in 2020 and in 2070, stated in kg.
-        reference = float(np.median(block.torque))
-        at_base = intercept + slope * reference
-        at_last = at_base * (factor(show_years[-1], klass, params) /
-                             factor(params.scenario.base_year, klass, params))
-        axis.annotate('', xy=(reference, at_last), xytext=(reference, at_base),
-                      arrowprops=dict(arrowstyle='<->', color='#C0392B', lw=1.6))
-        axis.annotate(f'{at_base:.1f} \u2192 {at_last:.1f} kg\n'
-                      f'bei {reference:.0f} Nm',
-                      xy=(reference * 1.03, (at_base + at_last) / 2),
-                      fontsize=8.5, color='#C0392B', va='center')
+            for colour_year, year in zip(shades, show_years):
+                scale = (factor(year, klass, params) /
+                         factor(params.scenario.base_year, klass, params))
+                axis.plot(span, (intercept + slope * span) * scale, lw=2.0,
+                          color=colour_year,
+                          label=str(year) if column_index == 0 and row_index == 0
+                          else None)
 
-        axis.set_title(title, fontsize=11.5)
-        axis.set_xlabel('Drehmoment [Nm]  (Segmentmitte)')
-        axis.set_ylabel('kg je Motor')
-        axis.set_ylim(bottom=0)
-        axis.grid(alpha=0.22, lw=0.6)
-        axis.legend(fontsize=8, framealpha=0.95, loc='upper left', ncol=2)
+            axis.plot(block.torque, block.meanValue, 'o', ms=6, mfc='white',
+                      mec=colour, mew=1.6, ls='none', zorder=6)
+            # ⚠️ THE SLOPES ARE NOT COMPARABLE ACROSS TOPOLOGIES. A fit with
+            # an intercept and a fit through the origin put the same machine's
+            # mass into different coefficients: the induction fit reads
+            # 50.5 g/Nm against 35.8 for PMSM, which looks like +41% and is
+            # +8% at 500 Nm once the 5.5 kg intercept is counted. So the panel
+            # states the MASS AT A REFERENCE TORQUE, which is comparable
+            # whatever shape the fit has.
+            at_reference = intercept + slope * REFERENCE_TORQUE
+            axis.annotate(f'{at_reference:.1f} kg bei {REFERENCE_TORQUE:.0f} Nm',
+                          xy=(0.04, 0.93), xycoords='axes fraction',
+                          fontsize=9, color=colour, va='top', weight='bold')
+            axis.annotate(f'Fit: {slope * 1000:.1f} g/Nm'
+                          + (f' + {intercept:.1f} kg' if intercept
+                             else ' (durch Ursprung)'),
+                          xy=(0.04, 0.845), xycoords='axes fraction',
+                          fontsize=7.5, color='#777777', va='top')
+            axis.plot([REFERENCE_TORQUE], [at_reference], marker='*', ms=13,
+                      color='#C0392B', zorder=8)
+            axis.annotate(f'n={len(block)}', xy=(0.96, 0.06),
+                          xycoords='axes fraction', fontsize=7.5,
+                          color='#888888', ha='right')
 
-    figure.suptitle('Masse gegen Drehmoment, je Jahr \u2014 '
+            if row_index == 0:
+                axis.set_title(title, fontsize=11)
+            if row_index == len(motors) - 1:
+                axis.set_xlabel('Drehmoment [Nm]')
+            if column_index == 0:
+                axis.set_ylabel(f'{MOTOR_LABEL.get(motor, motor)}\nkg je Motor',
+                                fontsize=9)
+            axis.set_ylim(bottom=0)
+            axis.set_xlim(left=0)
+            axis.grid(alpha=0.22, lw=0.6)
+
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    figure.legend(handles, labels, loc='lower center', ncol=len(show_years),
+                  fontsize=9.5, frameon=False, title='Jahr',
+                  bbox_to_anchor=(0.5, -0.008))
+    figure.suptitle('Masse gegen Drehmoment, je Motortyp und Jahr \u2014 '
                     'gleiches Drehmoment, weniger Material.\n'
-                    'Punkte: 11 Segmente, Stand 2020.  '
-                    'Linien: Regression, verschoben mit der Materialeffizienz.',
-                    fontsize=12)
-    figure.tight_layout()
+                    'Vergleichbar ist der rote Stern: Masse bei 500 Nm. '
+                    'Die Fit-Koeffizienten sind es NICHT \u2014 '
+                    'IM ist durch den Ursprung gefittet (n=3).', fontsize=11.5)
+    figure.tight_layout(rect=(0, 0.045, 1, 1))
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
     return out_path
