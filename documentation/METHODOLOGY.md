@@ -102,44 +102,53 @@ Where the current numbers actually are:
 | **OEM technical papers** | one machine each, well documented | scattered, and rarely a full BOM |
 | **Steel and magnet suppliers** | what the material IS | **public and current** — JFE and Nippon Steel give non-oriented electrical steel as 3.0–4.5 wt% Si, 0.15–2.5 wt% Al |
 
-### 2.2 Munro Live is the recent source, and it is on video
+### 2.2 Munro Live: rejected 2026-09-18
 
-Munro & Associates publish teardowns on YouTube as they do them. They are
-current, free, and they cover the machines this project needs — including two
-of the five motors:
+Munro & Associates publish current teardowns on YouTube -- YASA YM360 axial
+flux in May 2026, BYD iDM-210 in March 2026, the magnet-free Nissan Ariya in
+August 2025. Current, free, and covering machines nothing else covers.
 
-| teardown | when | why it matters here |
+**They do not weigh the parts.** The videos are engineering commentary on
+design, cooling and material choice, not a bill of material, and no component
+masses can be taken from them. Their written 10-motor benchmark does carry
+weights, and it is **2020 and paid** -- old by the same test that rejected
+Chalmers.
+
+Recorded so that neither is proposed again. What the videos are still good for
+is qualitative: which machine is oil-cooled, which uses hairpin winding, which
+has no magnets.
+
+### 2.3 What is freely available and current
+
+These carry numbers, cost nothing, and are current enough to use. In the order
+worth pulling:
+
+| source | what it gives | status |
 |---|---|---|
-| **YASA YM360 axial flux** | May 2026 | architecture, rotor and stator design, **cooling strategy**, material selection, against radial flux |
-| **BYD iDM-210 drive unit** | March 2026 | a Chinese drive unit — the other side of the §4.3 geography |
-| **Nissan Ariya magnet-free motor** | August 2025 | a production machine with no magnets at all |
-| VW ID.4 | | hairpin winding raises slot copper density **46% → 60%** |
-| Tesla Model S Plaid | | carbon-wrapped rotor, isolated pole cap |
+| **R&D GREET**, Argonne | **vehicle material composition by component**, traction motor included, free download, updated annually | **pull first.** The vehicle-material-composition module is the closest thing to a free BOM that exists |
+| **JRC**, *The role of rare earth elements in wind energy and electric mobility* and the 2024-25 CRM reports | rare earth per motor; already cited by the critical review, so already vetted | free PDFs |
+| **IEA**, critical minerals and rare earth reports | demand and intensity, already vetted by the review | free |
+| **JFE Steel**, **Nippon Steel** technical reports | what non-oriented electrical steel IS: **3.0-4.5 wt% Si, 0.15-2.5 wt% Al** | free PDFs, current |
+| **OEM and supplier statements** | rating, mass, voltage class, cooling, per machine. **Valeo sells a high-voltage rare-earth-magnet-free motor**; Renault-Valeo E7A; BMW Gen5/Gen6 | free, and the only current per-machine data |
+| **MDPI Machines 2025**, *Electric Vehicle Motors Free of Rare-Earth Elements* | the architecture landscape without NdFeB | open access |
 
-⚠️ **THE NUMBERS ARE SPOKEN AND ON SCREEN, NOT IN A TABLE.** A teardown video
-states a weight as it is weighed. Getting those into this project is manual
-watching and note-taking; it cannot be fetched. Each figure taken from a video
-must be recorded with the video, the date and the timestamp, or it is an
-unsourced number with a story attached.
+### 2.4 Figures already in hand from those sources
 
-**Beyond the videos, derive rather than find.** Two things ARE public and
-current, and together they give a bill of material without any old inventory:
+| | |
+|---|---|
+| NdPr alloy per EV traction motor | **1-3 kg** |
+| dysprosium per EV traction motor | **up to 200 g** |
+| share of EVs using NdFeB permanent-magnet motors | **over 90%** |
+| rare earth demand tied to EV motors | **37 kt in 2024, 43 kt expected 2025** |
+| non-oriented electrical steel | **3.0-4.5 wt% Si, 0.15-2.5 wt% Al** |
+| hairpin winding, slot copper density | **46% -> 60%** against round wire |
 
-1. **Motor ratings and masses**, per machine, from OEM and supplier statements
-   — BMW Gen5/Gen6, Renault–Valeo E7A, YASA P400, DeepDrive, Nissan's
-   magnet-free machine. Power, torque, mass, voltage class, cooling.
-2. **Material shares within a component**, from suppliers and the consolidated
-   dataset — what a lamination stack, a winding or a magnet is made of.
+Those are element-level numbers for the magnet and the steel -- the layer the
+consolidated dataset does not have -- and they are current. They are not yet a
+bill of material, because none of them says how much lamination stack or how
+much copper a given machine carries.
 
-A mass from (1) split by shares from (2) is a current bill of material whose
-every part is traceable and dated. That is the method the rejected paper
-demonstrated; only its numbers were stale.
-
-⚠️ **AND IT NEEDS A BUDGET DECISION.** If this project can buy an A2MAC1 or
-Munro subscription, the derivation becomes a cross-check instead of the primary
-route. That is a question about money, not about method, and it is open.
-
-### What tier 2 is not allowed to be
+**Beyond these, derive rather than find.**### What tier 2 is not allowed to be
 
 The report workbook of 2026-09-18 states component masses at **60% source
 reliability**, and the critical review of the same day marks as unconfirmed the
@@ -287,7 +296,8 @@ Tb raise. If a different quantity was meant, this section changes.
 | 2026-09-18 | Zenodo is tier 1 and the only measured source; everything else is tier 2 and labelled |
 | 2026-09-18 | The 2017/2018 Chalmers inventory is REJECTED as too old — its method is kept, its numbers are not |
 | 2026-09-18 | No recent public motor-only BOM exists in writing; bills of material are DERIVED from current ratings and current material shares |
-| 2026-09-18 | Munro Live's video teardowns are the recent source — free and current, extracted by hand, each figure cited to video, date and timestamp |
+| 2026-09-18 | Munro REJECTED — the videos do not weigh parts, the written benchmark is 2020 and paid |
+| 2026-09-18 | Free and current sources only: GREET first, then JRC, IEA, steel-supplier datasheets and OEM statements |
 | 2026-09-18 | Five motors: three from the dataset, axial flux and dual-rotor radial added as tier 2 |
 | 2026-09-18 | DeepDrive is dual-rotor **radial** flux, checked against the company's own description |
 | 2026-09-18 | Gearbox is inside the boundary; power electronics is not |
