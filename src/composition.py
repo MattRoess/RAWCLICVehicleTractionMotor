@@ -129,6 +129,63 @@ def trends() -> pd.DataFrame:
     frame['source'] = 'drexler2025'
     return frame
 
+# ============================================================== 1a FLEET
+# ======================================================================
+def fleet(path: str) -> pd.DataFrame:
+    """
+    The EV Database snapshot, parsed into numbers.
+
+    Everything in that file is a string with its unit attached -- '420 Nm',
+    '208 kW (283 PS)', '1847 kg' -- so the parsing is part of reading it.
+
+    ⚠️ TORQUE AND POWER ARE VEHICLE TOTALS. `performance_total_torque` is
+    what the car delivers, summed over its motors, so a dual-motor car's
+    figure is not one machine's figure. `motors` is taken from the drive
+    layout (AWD = 2, Front or Rear = 1) and the per-motor columns divide by
+    it. That assumes the two motors are equal, which they often are not --
+    it is an approximation, and it is the best the file supports.
+
+    `year` is the earliest availability date across all countries, which is
+    market entry and not the model year.
+    """
+    import json
+    import re
+
+    frame = pd.read_csv(path)
+
+    def number(column):
+        return pd.to_numeric(
+            frame[column].astype(str).str.extract(r'([\d.]+)')[0], errors='coerce')
+
+    out = pd.DataFrame({
+        'car_id': frame.car_id,
+        'name': frame.name,
+        'power_kw': number('performance_total_power'),
+        'torque_nm': number('performance_total_torque'),
+        'battery_voltage': number('battery_nominal_voltage'),
+        'vehicle_mass_kg': number('dimensions_weight_unladen'),
+        'segment': frame.miscellaneous_segment.str.split(' - ').str[0].str.strip(),
+        'drive': frame.performance_drive,
+    })
+    out['motors'] = frame.performance_drive.map(
+        {'Front': 1, 'Rear': 1, 'AWD': 2})
+
+    def first_year(value):
+        try:
+            years = [int(y) for entry in json.loads(value)
+                     for y in re.findall(r'(20\d\d)', str(entry.get('value', '')))]
+            return min(years) if years else np.nan
+        except Exception:                                   # noqa: BLE001
+            return np.nan
+
+    out['year'] = frame.availability_json.map(first_year)
+    out['torque_per_motor'] = out.torque_nm / out.motors
+    out['power_per_motor'] = out.power_kw / out.motors
+    out['sourceName'] = 'evdatabase'
+    out['sourceTier'] = 'tier2'
+    return out
+
+
 # ====================================================== 1b MACHINE SPECS
 # ======================================================================
 # Manufacturer data sheets: whole-machine mass against torque, for machines
@@ -408,6 +465,8 @@ def _read(params: Params, name: str, entry: dict) -> pd.DataFrame:
         # mechanically, so the transcription is the reader -- and it is in
         # code so that every value is diffable and attributable.
         frame = components()
+    elif reader == 'fleet':
+        frame = fleet(path)
     elif reader == 'spec':
         # Manufacturer data sheets, transcribed and cited above.
         frame = machines()
@@ -442,6 +501,29 @@ def _finding(check, severity, motor, segment, where, detail, **values) -> dict:
     return row
 
 
+_FLEET_TORQUE: dict = {}
+
+
+def load_fleet_ranges(params: Params) -> dict:
+    """
+    Per segment, the lowest and highest torque the fleet actually contains.
+
+    Filled once and cached, because the audit runs twice per stage and the
+    file is 1438 rows of strings that have to be parsed.
+    """
+    global _FLEET_TORQUE
+    if _FLEET_TORQUE:
+        return _FLEET_TORQUE
+    try:
+        fleet_frame = load(params, 'evdatabase').dropna(subset=['torque_nm'])
+    except Exception:                                       # noqa: BLE001
+        return _FLEET_TORQUE
+    grouped = fleet_frame.groupby('segment')['torque_nm'].agg(['min', 'max', 'count'])
+    _FLEET_TORQUE = {segment: (row['min'], row['max'], int(row['count']))
+                     for segment, row in grouped.iterrows()}
+    return _FLEET_TORQUE
+
+
 def audit(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
     """
     Every defect found in the workbook, one per row.
@@ -453,6 +535,7 @@ def audit(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
     """
     findings: list[dict] = []
     data = params.data
+    load_fleet_ranges(params)
 
     # ------------------------------------------------------------------ 1
     # THE STATOR IS COUNTED TWICE, or the stator total is not the stator.
@@ -646,6 +729,29 @@ def audit(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
                     f'{len(rows)} rows carry a mass and no torque, so the mass '
                     f'cannot be compared with anything or expressed per Nm',
                     rows=len(rows)))
+
+    # ------------------------------------------------------------------ 7d
+    # TORQUE RANGES THE FLEET DOES NOT CONTAIN. The consolidated dataset
+    # states a torque_min and torque_max per segment, taken from the EV
+    # Database, and the regressions are evaluated across that range. A later
+    # snapshot of the same database says which torques the segment really
+    # holds. Where the stated maximum is above anything the fleet contains,
+    # the regression was evaluated outside its own sampling frame.
+    if 'productKeyLevel3' in frame.columns and _FLEET_TORQUE:
+        stated = frame.dropna(subset=['torque_min']).groupby(
+            'productKeyLevel3')[['torque_min', 'torque_max']].first()
+        for segment, row in stated.iterrows():
+            actual = _FLEET_TORQUE.get(segment)
+            if not actual:
+                continue
+            low, high, count = actual
+            if row.torque_max > high * 1.02:
+                findings.append(_finding(
+                    'torque-beyond-fleet', 'note', '(all)', segment, 'torque_max',
+                    f'stated maximum {row.torque_max:.0f} Nm against {high:.0f} Nm, '
+                    f'the highest in {count} models of that segment in the EV '
+                    f'Database -- a factor of {row.torque_max / high:.2f}',
+                    value=row.torque_max))
 
     # ------------------------------------------------------------------ 8
     # ROWS THIS PROJECT HAS MARKED UNRELIABLE. Only present once corrections
@@ -1521,6 +1627,61 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
         'Bänder: 95% aus Monte-Carlo-Ziehungen, Regression je Ziehung neu '
         'gefittet.  Herstellerpunkte haben keine angegebene Unsicherheit.',
         fontsize=11.5)
+    figure.tight_layout()
+    figure.savefig(out_path, dpi=160)
+    plt.close(figure)
+    return out_path
+
+
+def figure_fleet(params, out_path: str) -> str:
+    """
+    What the fleet actually asks of its motors, and how that changed.
+
+    THE QUESTION THIS ANSWERS. Every mass in this project is a regression on
+    torque, and the whole trajectory says "same torque, less material". That
+    claim is only worth anything if the torque really does stay the same. This
+    figure checks it against 1438 models.
+
+    ⚠️ MEDIANS WITHIN A SEGMENT, NOT ACROSS THE FLEET. A fleet-wide median
+    moves when the model mix moves: the 2015 fleet was a handful of premium
+    cars and the 2017 fleet was small hatchbacks, so a fleet median swings
+    from 482 to 225 Nm between them and says nothing about engineering. Held
+    within a segment, and only where at least five models support the point.
+    """
+    import matplotlib.pyplot as plt
+
+    frame = load(params, 'evdatabase')
+    frame = frame[frame.year.between(2020, 2026) & frame.torque_nm.notna()]
+    segments = ['B', 'C', 'D', 'F', 'JB', 'JC', 'JD']
+    colours = plt.get_cmap('tab10')
+
+    figure, axes = plt.subplots(1, 2, figsize=(14, 5.6))
+    for axis, (column, label) in zip(axes, [
+            ('torque_per_motor', 'Drehmoment je Motor [Nm]'),
+            ('power_per_motor', 'Leistung je Motor [kW]')]):
+        for index, segment in enumerate(segments):
+            block = frame[frame.segment == segment]
+            counts = block.groupby('year')[column].count()
+            medians = block.groupby('year')[column].median().where(counts >= 5)
+            medians = medians.dropna()
+            if len(medians) < 3:
+                continue
+            axis.plot(medians.index, medians.values, 'o-', ms=5, lw=2,
+                      color=colours(index), label=f'{segment} (n={len(block)})')
+        axis.set_xlabel('Jahr des Markteintritts')
+        axis.set_ylabel(label)
+        axis.set_ylim(bottom=0)
+        axis.grid(alpha=0.25, lw=0.6)
+        axis.legend(fontsize=8, ncol=2, framealpha=0.95, loc='lower right')
+
+    axes[0].set_title('Drehmoment je Motor: weitgehend flach',
+                      fontsize=11.5)
+    axes[1].set_title('Leistung je Motor: leicht steigend, nicht überall',
+                      fontsize=11.5)
+    figure.suptitle(
+        'Was die Flotte von ihren Motoren verlangt, EV Database, 1438 Modelle\n'
+        'Median je Segment, nur wo mindestens 5 Modelle das Jahr tragen',
+        fontsize=12)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
     plt.close(figure)

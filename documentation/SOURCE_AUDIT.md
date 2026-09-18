@@ -270,6 +270,57 @@ here and nowhere else.
 after correction, and that is correct: marking a defect is not fixing it. The
 audit still reports it, and it is the one blocking finding left.
 
+### The fleet itself, and what it says about the torque ranges
+
+`data/EV_details.csv` — **1438 battery-electric models** from the EV Database
+with total power, total torque, drive layout, segment, battery voltage, kerb
+mass and market-entry dates.
+
+⚠️ **Not an independent check of the masses.** The consolidated description
+states its torques come from this same database, so agreement on torque is
+arithmetic. It *is* an independent check of the **ranges**, because it is a
+later snapshot.
+
+**Four segments state a maximum torque the fleet does not contain:**
+
+| segment | stated max | highest in the fleet | factor |
+|---|---|---|---|
+| **C** | 1100 Nm | 600 Nm (112 models) | **1.83** |
+| **A** | 345 Nm | 212 Nm (34 models) | **1.63** |
+| JB | 740 Nm | 584 Nm (110 models) | 1.27 |
+| B | 395 Nm | 360 Nm (83 models) | 1.10 |
+
+The *minima* match exactly in several segments — A at 113 Nm, D at 290, F at
+345, JC at 220 — so the lower bound is read straight from this database and the
+upper bound is not. Where it is not, the regression was evaluated outside its
+own sampling frame.
+
+### And the assumption the whole trajectory rests on holds
+
+Every mass here is a regression on torque, and §4 claims **same torque, less
+material**. That is only worth anything if the torque really does stay the
+same. Within a segment, median torque per motor, 2020 → 2026:
+
+| | 2020 | 2026 | |
+|---|---|---|---|
+| C | 273 Nm | 290 Nm | +6% |
+| JC | 318 Nm | 338 Nm | +6% |
+| D | 328 Nm | 347 Nm | +6% |
+| B | 258 Nm | 266 Nm | +3% |
+| F | 400 Nm | 472 Nm | +18% |
+
+**Torque per motor is flat.** The assumption holds.
+
+⚠️ **A fleet-wide median would have said the opposite.** Across all segments it
+swings 482 → 225 → 545 → 310 Nm between 2015 and 2020, because the 2015 fleet
+was a handful of premium cars and the 2017 fleet was small hatchbacks. That is
+model mix, not engineering. Medians are held **within a segment**, and only
+where at least five models support the point.
+
+Power per motor rises in some segments (C 115 → 140 kW) and not others (JC flat
+at ~150 kW). Where it rises against flat torque, the machine is turning faster
+— which is the mechanism Drexler names for the shrinking lamination stack.
+
 ### Open: the topologies may be too similar to each other
 
 At 500 Nm the consolidated dataset gives, for the rotor lamination stack,

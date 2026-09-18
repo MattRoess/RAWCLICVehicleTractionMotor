@@ -44,7 +44,8 @@ import pandas as pd                                        # noqa: E402
 from src.composition import (CITATION, apply_corrections,   # noqa: E402
                              audit, components, declared,
                              figure_critical, figure_factors,
-                             figure_motor_mass, figure_topologies,
+                             figure_fleet, figure_motor_mass,
+                             figure_topologies,
                              load, trajectory)
 from src.params_schema import ParameterError, current       # noqa: E402
 
@@ -219,6 +220,7 @@ def main() -> int:
                         os.path.join(figures, '03_critical_materials.png')),
         figure_topologies(current_year, params,
                           os.path.join(figures, '04_topologies.png')),
+        figure_fleet(params, os.path.join(figures, '05_fleet_demand.png')),
     ]
 
     print(f'  {out}.xlsx              {len(current_year)} rows, '

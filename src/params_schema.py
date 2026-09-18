@@ -70,7 +70,7 @@ TIERS = ('tier1', 'tier2')
 # The readers that exist. A source declares which shape its file is in, so
 # that adding a source is a declaration and not a code change -- until the
 # shape is genuinely new, which is what `READERS` makes visible.
-READERS = ('house', 'bom', 'drexler', 'spec')
+READERS = ('house', 'bom', 'drexler', 'spec', 'fleet')
 
 
 @dataclass
@@ -160,6 +160,30 @@ class DataParams:
                      'design and manufacturing technologies. Elektrotech. '
                      'Inftech. 142, 312-345 (2025). '
                      'doi:10.1007/s00502-025-01331-3'),
+
+        # THE FLEET ITSELF. 1438 battery-electric models from the EV
+        # Database, with total power, total torque, drive layout, segment,
+        # nominal battery voltage, kerb mass and availability dates.
+        #
+        # ⚠️ THIS IS THE SOURCE ZENODO'S TORQUES CAME FROM. The consolidated
+        # description says torques per model are taken from the EV Database
+        # and classified into segments, so this is not an independent check
+        # of the masses -- but it IS an independent check of the TORQUE
+        # RANGES, because it is a later snapshot of the same database.
+        #
+        # ⚠️ NO MASSES OF MOTOR PARTS. It gives what the vehicle delivers,
+        # never what the motor is made of. It cannot fill a composition row.
+        # What it does is say which torques the fleet actually contains, per
+        # segment and per year, and therefore where the regressions are
+        # interpolating and where they are inventing.
+        'evdatabase': dict(
+            file='data/EV_details.csv',
+            sheet='',
+            role='data', tier='tier2', vintage=2026, published=2026,
+            covers=(2011, 2026), horizon='historic',
+            reads='fleet',
+            citation='EV Database, ev-database.org, model details snapshot '
+                     '2026-09; 1438 models'),
 
         # MANUFACTURER DATA SHEETS. Whole-machine mass and torque, for
         # topologies the consolidated dataset does not contain at all.
