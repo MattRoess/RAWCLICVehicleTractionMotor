@@ -216,12 +216,23 @@ the winding. The flat-wire/hairpin mechanism is separable and quantified —
 **round wire 6.23 kg against flat wire 4.39 kg, 42% more copper for the same
 job**.
 
-⚠️ **THESE RATES CANNOT BE EXTRAPOLATED TO 2070.** −7.6%/yr compounded for
-45 years leaves 3% of the stator, which is not a motor. The annual figures are
-derived in `src/drexler.py:trends()` from two period averages three years
-apart, and they describe a step change in winding technology and stator sizing
-that happened once. §4.1 needs a saturating curve whose *early* slope matches
-this and whose limit is a physical one, not a continued exponential.
+⚠️ **THESE RATES ARE NOT USED AS THE TRAJECTORY, AND THAT IS SETTLED.**
+−7.6%/yr compounded for 45 years leaves 3% of the stator, which is not a
+motor. What Drexler measured is the rate *during a one-off technology change*
+that fell inside his window — round wire giving way to hairpin, active length
+and outer diameter shrinking with it. Used as a standing annual rate it
+asserts that a comparable change arrives every year until 2070.
+
+**Decided 2026-09-18 after Matthias rejected a 37% fall between 2020 and 2030:**
+`scenario.initial_rate` is **1%/yr**, the rate of *ordinary refinement* — better
+steel grades, tighter tolerances, incremental thermal gains, no technology
+change in it. 2020 → 2030 is now −9%. Drexler's measured rates are kept in
+`observed_transition_rate` so the gap stays visible.
+
+**A future step change is not denied**, it is simply not modelled as a rate.
+Axial flux reaching volume, or a magnet-free architecture taking share, is a
+different machine and belongs in `run.motors` as its own entry — not hidden
+inside a percentage. Both now are.
 
 ### 2.2.1 Adding a source is a declaration, not a code change
 
@@ -503,4 +514,54 @@ Tb raise. If a different quantity was meant, this section changes.
 | 2026-09-18 | Years 2010–2070 built from a steady, modest material-efficiency improvement |
 | 2026-09-18 | **Zenodo is a historic anchor, not the forward basis** — it describes the 2020 fleet, and read forward it would deny the change this project models |
 | 2026-09-18 | Each source carries a `covers` window; one vintage means one year. 2 of 13 modelled years are measured, and 2010/2015 are a backcast, not a reading |
+| 2026-09-18 | Composition is a function of TORQUE, not of segment — segments fit the relationship and are dropped |
+| 2026-09-18 | Masses are per VEHICLE (all its motors), not per motor; the categories are drive configurations |
+| 2026-09-18 | Torque grid stops at 1200 Nm because above it the per-motor arithmetic breaks, not because vehicles are rare |
+| 2026-09-18 | `initial_rate` is 1%/yr ordinary refinement, NOT Drexler's −7.6%/yr, which was a one-off transition |
+| 2026-09-18 | Bands are the FIT's uncertainty, bootstrapped over segments, 200 000 draws |
+| 2026-09-18 | A type with too few segments borrows its slope and keeps its own level |
 | 2026-09-18 | Magnet Dy/Tb content follows permissible magnet temperature, which follows cooling architecture, which follows heavy-REE access — Europe oil-cooled, China housing-water-cooled |
+
+
+---
+
+## 5. What the project produces, as of 2026-09-18
+
+Composition by **motor type, torque, voltage class and year**, with no segment
+dimension — `data/TractionMotor_composition_by_torque.csv`, 14 508 rows.
+
+**Segments were how the source was aggregated, not what drives the mass.** A
+segment is a market category; the same segment holds 180 Nm and 600 Nm cars.
+Segments are used to fit the relationship and then dropped, so the
+stock-and-flow model asks for a torque and a year and never has to decide
+which segment a 2060 vehicle is in.
+
+### Five motor types
+
+| | basis | uncertainty | note |
+|---|---|---|---|
+| PMSM | 11 segments | ±12% | |
+| EESM | 10 segments | ±18% | copper still holds the C3-flagged rotor winding |
+| IM + PM | 3 segments | ±12% | **slope borrowed** from the other two |
+| axial flux | 1 data sheet | ±28% | split from YASA's own published factors |
+| dual-rotor radial | 1 data sheet | ±28% | anchored at 1500 Nm, mostly extrapolation |
+
+### The torque grid stops at 1200 Nm
+
+Not because vehicles above it are rare — 17 of 1438 models — but because **up
+there the per-motor arithmetic breaks**. Median power per assumed motor runs
+150–242 kW below 1200 Nm and 348–460 kW above it. Nobody builds a 430 kW
+traction machine, so those are three and four motors, not one all-wheel drive.
+
+### Uncertainty is the fit's, and it is drawn
+
+200 000 draws, the regression refitted on every one with the segments
+bootstrapped. **The band is the uncertainty of the fitted line**, not of the
+source's values: drawing only the published intervals gave ~1% while the
+points scatter 8% around the line, which would be a statement about the
+workbook rather than about the fit.
+
+Where a type has too few segments to carry a slope
+(`run.min_segments_for_slope`), the slope is **borrowed** per material from the
+types that have enough and only the level comes from its own points. Rows carry
+`slope_borrowed`.
