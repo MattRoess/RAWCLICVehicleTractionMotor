@@ -318,6 +318,47 @@ DeepDrive's own claims, to be carried as claims: **50% less magnet material,
 every architecture share in the reports is unconfirmed. So the span is built
 from stated rules, and each rule is a decision with a name.
 
+### 4.0 Two years are measured. Eleven are constructed.
+
+**Decided 2026-09-18: the Zenodo dataset is a historic anchor, not a basis for
+the forward look.**
+
+It is a good dataset and it is current as a publication -- but it describes the
+**2020** fleet: 400 V, round-wire stators, magnets sized before heavy-rare-earth
+reduction became a design driver. Read forward it would assert that none of
+that changes, which is precisely the thing this project exists to deny. It
+anchors history and supplies no year after 2020.
+
+Every source carries a `covers` window in the registry, and it is the years the
+source's numbers legitimately describe -- not when it was written. Zenodo has
+**one vintage**, so its window is one year. So does Drexler 2025, until the
+file is in hand and shows otherwise.
+
+At `run.years = '2010-2070, 5'` that gives:
+
+| | |
+|---|---|
+| **measured** | **2020** (Zenodo), **2025** (Drexler) |
+| **constructed** | 2010, 2015, 2030, 2035, 2040, 2045, 2050, 2055, 2060, 2065, 2070 |
+
+**Two of thirteen.** Printed on every run of `00_parameters.py`, because it is
+the most consequential fact about this project and the easiest one to forget
+once the figures look convincing.
+
+Note that **2010 and 2015 are constructed too.** They are a backcast, not a
+reading: no source here describes the 2010 fleet. "Historic" does not mean
+"measured", and the registry refuses to pretend otherwise.
+
+**`horizon` is `historic` for every source, and only `historic` is accepted.**
+No source describes the future. Every year past 2025 is built by §4.1-§4.4 on
+stated mechanisms -- efficiency improvement, magnet chemistry, cooling
+architecture, voltage class -- and each one has to be defensible on its
+mechanism rather than on a measurement it does not have.
+
+`data.measured_until` and `data.year_is_measured(year)` exist so a stage asks
+instead of assuming, and so that moving the boundary is a registry edit rather
+than a number buried in code.
+
 ### 4.1 Steady efficiency improvement
 
 **Decided 2026-09-18.** The same power and the same torque are delivered with
@@ -428,4 +469,6 @@ Tb raise. If a different quantity was meant, this section changes.
 | 2026-09-18 | Gearbox is inside the boundary; power electronics is not |
 | 2026-09-18 | 400 V, 800 V and 1000 V described separately, because voltage decides copper |
 | 2026-09-18 | Years 2010–2070 built from a steady, modest material-efficiency improvement |
+| 2026-09-18 | **Zenodo is a historic anchor, not the forward basis** — it describes the 2020 fleet, and read forward it would deny the change this project models |
+| 2026-09-18 | Each source carries a `covers` window; one vintage means one year. 2 of 13 modelled years are measured, and 2010/2015 are a backcast, not a reading |
 | 2026-09-18 | Magnet Dy/Tb content follows permissible magnet temperature, which follows cooling architecture, which follows heavy-REE access — Europe oil-cooled, China housing-water-cooled |

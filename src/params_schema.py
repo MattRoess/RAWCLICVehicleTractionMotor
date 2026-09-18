@@ -95,6 +95,13 @@ class DataParams:
     #    tier      'tier1' measured and in the house schema; 'tier2' else
     #    vintage   the year the DATA describes -- not when it was published
     #    published the year the source was issued
+    #    covers    (first, last) -- THE YEARS THIS SOURCE MAY SUPPLY. Not
+    #              when it was written: which years its numbers legitimately
+    #              describe. A year outside this window is refused.
+    #    horizon   'historic' only, today. NO SOURCE DESCRIBES THE FUTURE.
+    #              Every year past the registry's coverage is a modelling
+    #              decision built in §4 of METHODOLOGY.md, and it has to be
+    #              visible as one rather than inherited from a measurement.
     #    reads     which reader in src/source.py understands the file
     #    citation  what a figure caption has to be able to say
     #
@@ -107,14 +114,25 @@ class DataParams:
     sources: dict[str, dict] = field(default_factory=lambda: {
 
         # TIER 1. The only measured source in the house schema. Dated
-        # 29.05.2026 and reviewed by Valeo, so it is CURRENT -- the `-2020`
-        # in productionYear is the vintage it describes, not its age.
-        # Its masses are a torque regression fitted to Drexler 2025.
+        # 29.05.2026 and reviewed by Valeo -- but it DESCRIBES 2020, and that
+        # is what `covers` records.
+        #
+        # ⚠️ HISTORIC REVIEW ONLY. Decided 2026-09-18. The fleet it describes
+        # is the 2020 fleet: 400 V, round-wire stators, magnets sized before
+        # heavy-rare-earth reduction became a design driver. Read forward it
+        # would assert that none of that changes, which is the one thing this
+        # project exists to deny. It anchors the historic end of the
+        # trajectory and supplies no year after 2020.
         'zenodo': dict(
             file='documentation/TractionMotor/Zenodo/'
                  'RAWCLIC_BEV_motor_consolidated_data_V1.xlsx',
             sheet='consolidated_data',
             role='data', tier='tier1', vintage=2020, published=2026,
+            # ONE VINTAGE, so one year. `productionYear` holds a single
+            # value and nothing in the workbook describes 2010 or 2015; a
+            # wider window here would be this file inventing coverage the
+            # data does not have.
+            covers=(2020, 2020), horizon='historic',
             reads='house',
             citation='RAWCLIC Deliverable 3.1, Harmonized datasets for '
                      'secondary RM sources for the twin transition, V1, '
@@ -130,6 +148,9 @@ class DataParams:
         'drexler2025': dict(
             file='', sheet='',
             role='data', tier='tier2', vintage=2025, published=2025,
+            # A 2025 benchmark. One vintage too, until the file is in hand
+            # and shows otherwise.
+            covers=(2025, 2025), horizon='historic',
             reads='bom',
             citation='Drexler, D., Kampker, A., Born, H., et al. Advances in '
                      'electric motors: a review and benchmarking of product '
@@ -144,6 +165,7 @@ class DataParams:
         'chalmers2018': dict(
             file='', sheet='',
             role='verification', tier='tier2', vintage=2017, published=2018,
+            covers=(2017, 2017), horizon='historic',
             reads='bom',
             citation='Nordelof et al., A scalable life cycle inventory of an '
                      'electrical automotive traction machine, Int J LCA, '
@@ -151,11 +173,13 @@ class DataParams:
         'munro2020': dict(
             file='', sheet='',
             role='verification', tier='tier2', vintage=2020, published=2020,
+            covers=(2020, 2020), horizon='historic',
             reads='bom',
             citation='Munro & Associates, 10-motor benchmark (2020), paid'),
         'greet': dict(
             file='', sheet='',
             role='verification', tier='tier2', vintage=2020, published=2025,
+            covers=(2020, 2020), horizon='historic',
             reads='bom',
             citation='Argonne National Laboratory, R&D GREET, vehicle '
                      'material composition'),
@@ -210,6 +234,30 @@ class DataParams:
         """Sources with that role, present or not -- what the project knows of."""
         return {name: entry for name, entry in self.sources.items()
                 if entry.get('role') == role}
+
+    def covering(self, year: int, role: str = 'data') -> dict[str, dict]:
+        """The sources entitled to supply that year."""
+        return {name: entry for name, entry in self.declared(role).items()
+                if entry.get('covers', (0, 0))[0] <= year <= entry.get('covers', (0, 0))[1]}
+
+    @property
+    def measured_until(self) -> int:
+        """
+        The last year any data source covers.
+
+        **EVERYTHING AFTER THIS YEAR IS CONSTRUCTED.** Not interpolated from a
+        measurement, not inherited from the newest source -- built by the
+        scenarios in METHODOLOGY.md §4, on stated mechanisms. This property
+        exists so that a stage can ask rather than assume, and so that moving
+        the boundary is a registry edit rather than a number buried in code.
+        """
+        windows = [entry.get('covers', (0, 0))[1]
+                   for entry in self.declared('data').values()]
+        return max(windows) if windows else 0
+
+    def year_is_measured(self, year: int) -> bool:
+        """Whether any data source is entitled to supply that year."""
+        return bool(self.covering(year, 'data'))
 
 
 @dataclass
@@ -334,6 +382,18 @@ class Params:
                               f'has to be one of {READERS}. A genuinely new file '
                               f'shape needs a reader in src/source.py before it '
                               f'can be declared.')
+            covers = entry.get('covers')
+            if (not isinstance(covers, (tuple, list)) or len(covers) != 2
+                    or not all(isinstance(year, int) for year in covers)
+                    or covers[0] > covers[1]):
+                issues.append(f'{where}["covers"] is {covers!r}; it has to be '
+                              f'(first_year, last_year) -- the years this source '
+                              f'may supply, with first <= last')
+            if entry.get('horizon') != 'historic':
+                issues.append(f'{where}["horizon"] is {entry.get("horizon")!r}. '
+                              f'Only "historic" is allowed: no source describes '
+                              f'the future, and a year past the registry\'s '
+                              f'coverage is a modelling decision, not a reading.')
             if not entry.get('citation'):
                 issues.append(f'{where} has no citation. Every number this '
                               f'project reports has to be attributable, so a '
@@ -421,6 +481,25 @@ def describe(section, name: str) -> str:
         f'Setting in {section_type.__name__}.'
 
 
+def years_wanted(spec: str) -> list[int]:
+    """
+    The years `run.years` asks for.
+
+    Written once, here, so that the settings file and every stage agree about
+    what '2010-2070, 5' means.
+    """
+    spec = (spec or '').strip()
+    step = 1
+    if ',' in spec:
+        spec, _, tail = spec.partition(',')
+        step = int(tail.strip())
+    spec = spec.strip()
+    if '-' in spec:
+        first, _, last = spec.partition('-')
+        return list(range(int(first), int(last) + 1, step))
+    return [int(spec)]
+
+
 def source_status(params: Params) -> str:
     """
     Every declared source, whether it is here, and what it may be used for.
@@ -440,9 +519,11 @@ def source_status(params: Params) -> str:
         else:
             state = f'{path}\n                  NOT FOUND'
         mark = '*' if name == params.data.primary else ' '
+        covers = entry.get('covers', ('?', '?'))
+        window = (f'{covers[0]}' if covers[0] == covers[1]
+                  else f'{covers[0]}-{covers[1]}')
         lines.append(f'{mark} {name:<14} {entry.get("role","?"):<12} '
-                     f'{entry.get("tier","?"):<6} '
-                     f'vintage {entry.get("vintage","?")}\n'
+                     f'{entry.get("tier","?"):<6} covers {window}\n'
                      f'                  {state}')
 
     if params.data.composition_file:
@@ -451,6 +532,20 @@ def source_status(params: Params) -> str:
         lines.append('  elements       NOT YET. No source in the registry carries '
                      'an element layer.')
     lines.append('  (* is data.primary)')
+
+    # The single most consequential fact about this project, printed every run:
+    # how few of the years it reports are actually measured.
+    try:
+        wanted = years_wanted(params.run.years)
+    except Exception:                                    # noqa: BLE001
+        wanted = []
+    if wanted:
+        measured = [year for year in wanted if params.data.year_is_measured(year)]
+        lines.append(f'\n  YEARS  {len(measured)} of {len(wanted)} measured: '
+                     f'{", ".join(map(str, measured)) or "none"}')
+        lines.append(f'         every other year is CONSTRUCTED by the scenarios '
+                     f'in METHODOLOGY.md §4,\n         not read from a source. '
+                     f'Sources stop at {params.data.measured_until}.')
     return '\n  '.join(lines)
 
 
