@@ -44,8 +44,7 @@ import pandas as pd                                        # noqa: E402
 from src.composition import (CITATION, apply_corrections,   # noqa: E402
                              audit, components, declared,
                              figure_critical, figure_factors,
-                             figure_datapoints, figure_motor_mass,
-                             load, trajectory)
+                             figure_motor_mass, load, trajectory)
 from src.params_schema import ParameterError, current       # noqa: E402
 
 STEM = 'TractionMotor_composition'
@@ -211,13 +210,12 @@ def main() -> int:
 
     figures = params.output.figures_dir
     made = [
-        figure_factors(params, os.path.join(figures, '01_material_efficiency.png')),
+        figure_factors(params, os.path.join(figures, '01_material_efficiency.png'),
+                       current=current_year),
         figure_motor_mass(series, params,
                           os.path.join(figures, '02_motor_mass.png')),
         figure_critical(series, params,
                         os.path.join(figures, '03_critical_materials.png')),
-        figure_datapoints(current_year, params,
-                          os.path.join(figures, '04_datapoints.png')),
     ]
 
     print(f'  {out}.xlsx              {len(current_year)} rows, '
