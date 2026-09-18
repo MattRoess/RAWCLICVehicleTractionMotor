@@ -991,104 +991,98 @@ def _mark_measured(axis, params, years):
 
 def figure_factors(params, out_path: str, current: pd.DataFrame = None) -> str:
     """
-    The trajectory in KILOGRAMS, with every measured point on it.
+    Mass against TORQUE, with one curve per year.
 
-    THE POINTS ARE THE POINT. A curve of relative factors cannot be checked
-    against anything -- it starts at 1.0 by construction and looks reasonable
-    whatever it does. In kilograms it has to land where the measurements are,
-    and where it does not, the reader sees it.
+    ⚠️ MASS OVER TIME IS THE WRONG AXIS, and the earlier versions of this
+    figure had it. Component mass is set by how much torque the machine has to
+    produce: 125 Nm needs 10.8 kg of stator lamination and 868 Nm needs
+    34.5 kg. Plotting those against the year shows the spread between VEHICLE
+    SEGMENTS and buries the thing the project is about, which is that the same
+    torque needs less material as time passes.
 
-    What is on it:
-      * Drexler's 46 machines, as mean and full span, over 2018-2023
-      * the consolidated dataset's 11 segment values at 2020, as points
-      * the modelled curve from 2020 on, for the same quantity
+    So torque goes on the x axis and the years become a family of curves. The
+    curves move DOWN, and the vertical distance between them is the whole
+    claim: same torque, less material.
 
-    ⚠️ THE TWO SOURCES ARE NOT INDEPENDENT. Every consolidated value is a
-    regression through Drexler's points, so the segment values agreeing with
-    his sample is not corroboration -- it is arithmetic. They are drawn
-    differently for that reason, and where the segment values leave his
-    measured span, the regression has left its own data.
+    The points are the measured segment values at the base year, at the
+    midpoint of each segment's torque range. The regression through them is
+    this project's own fit -- the consolidated dataset was built by exactly
+    this kind of fit through Drexler's machines, so the line is drawn the way
+    the data was made.
     """
     import matplotlib.pyplot as plt
 
-    from src.params_schema import years_wanted
-
-    years = years_wanted(params.run.years)
-    fine = list(range(params.scenario.base_year, max(years) + 1))
-    bench = components().set_index('part')
-
     panels = [
-        ('Stator-Blechpaket', 'lamination', 'statorSheetLaminationStack',
+        ('Stator-Blechpaket', 'lamination',
          lambda f: f.componentKeyLevel3 == 'statorSheetLaminationStack'),
-        ('Stator-Wicklung (Kupfer)', 'copper', 'windings.roundWire',
+        ('Stator-Wicklung (Kupfer)', 'copper',
          lambda f: ((f.componentKeyLevel2 == 'stator') &
                     (f.componentKeyLevel3 == 'windings'))),
-        ('Rotor-Blechpaket', 'lamination', 'rotorSheetLaminationStack',
+        ('Rotor-Blechpaket', 'lamination',
          lambda f: f.componentKeyLevel3 == 'rotorSheetLaminationStack'),
     ]
+    show_years = [y for y in (params.scenario.base_year, 2030, 2050, 2070)]
+    shades = ['#1a1a1a', '#4a6fa5', '#7aa6c2', '#a9c9d8']
+    markers = {'PMElectricMotors': 'o', 'EESMElectricMotors': 's',
+               'IMandPMElectricMotors': 'D'}
 
-    figure, axes = plt.subplots(1, 3, figsize=(15, 5.8))
-    base = None
-    if current is not None:
-        base = current[(current.voltageClass == params.scenario.base_voltage) &
-                       (current.productionYear == params.scenario.base_year) &
-                       (current.parameterCode == params.data.material_of_component)]
+    figure, axes = plt.subplots(1, 3, figsize=(15.5, 5.6))
+    if current is None:
+        raise ValueError('figure_factors needs the current composition')
 
-    for axis, (title, klass, part, picker) in zip(axes, panels):
-        colour = MATERIAL_COLOUR[klass]
+    base = current[(current.voltageClass == params.scenario.base_voltage) &
+                   (current.productionYear == params.scenario.base_year) &
+                   (current.parameterCode == params.data.material_of_component)]
 
-        # ---- the measured sample, where it was measured -------------------
-        if part in bench.index:
-            row = bench.loc[part]
-            low, high = float(row['min']), float(row['max'])
-            mean = float(row['mean'])
-            axis.fill_between([2018, 2023], low, high, color='#888888',
-                              alpha=0.14, lw=0, zorder=1)
-            axis.plot([2018, 2023], [mean, mean], color='#444444', lw=2.2,
-                      zorder=3)
-            n = '' if pd.isna(row['n']) else f' (n={int(row["n"])})'
-            axis.annotate(f'Drexler{n}\nMittel {mean:.1f} kg\n'
-                          f'Spanne {low:.1f}\u2013{high:.1f}',
-                          xy=(2019.0, mean), fontsize=7.6, va='bottom',
-                          ha='left', color='#333333')
+    for axis, (title, klass, picker) in zip(axes, panels):
+        rows = picker(base) & base.torque_min.notna() & base.meanValue.notna()
+        block = base[rows].copy()
+        block['torque'] = (block.torque_min + block.torque_max) / 2.0
+        if block.empty:
+            continue
 
-        # ---- the consolidated values, and the curve through them ----------
-        if base is not None:
-            rows = base[picker(base)]
-            for motor, group in rows.groupby('componentKeyLevel1'):
-                values = group.meanValue.dropna()
-                if values.empty:
-                    continue
-                axis.plot([params.scenario.base_year] * len(values), values,
-                          'o', ms=5, mfc='white', mec=colour, mew=1.3,
-                          ls='none', zorder=5)
-                # the curve, from each segment value, so the spread travels
-                for value in values:
-                    axis.plot(fine,
-                              [value * factor(y, klass, params) /
-                               factor(params.scenario.base_year, klass, params)
-                               for y in fine],
-                              color=colour, lw=0.9, alpha=0.38, zorder=4)
-            median = rows.meanValue.median()
-            if pd.notna(median):
-                axis.plot(fine,
-                          [median * factor(y, klass, params) for y in fine],
-                          color=colour, lw=2.8, zorder=6,
-                          label=f'Modell, Median der Segmente')
+        # The fit through the measured points, at the base year. Least squares
+        # on mass against torque -- an intercept is allowed because a machine
+        # of zero torque still has a shaft and end plates.
+        slope, intercept = np.polyfit(block.torque, block.meanValue, 1)
+        span = np.linspace(block.torque.min() * 0.9, block.torque.max() * 1.05, 50)
+
+        for colour, year in zip(shades, show_years):
+            scale = (factor(year, klass, params) /
+                     factor(params.scenario.base_year, klass, params))
+            axis.plot(span, (intercept + slope * span) * scale, lw=2.2,
+                      color=colour, label=str(year), zorder=4)
+
+        for motor, group in block.groupby('componentKeyLevel1'):
+            axis.plot(group.torque, group.meanValue, markers.get(motor, 'o'),
+                      ms=6.5, mfc='white', mec=MATERIAL_COLOUR[klass], mew=1.5,
+                      ls='none', zorder=6,
+                      label=motor.replace('ElectricMotors', ''))
+
+        # What the same torque costs in 2020 and in 2070, stated in kg.
+        reference = float(np.median(block.torque))
+        at_base = intercept + slope * reference
+        at_last = at_base * (factor(show_years[-1], klass, params) /
+                             factor(params.scenario.base_year, klass, params))
+        axis.annotate('', xy=(reference, at_last), xytext=(reference, at_base),
+                      arrowprops=dict(arrowstyle='<->', color='#C0392B', lw=1.6))
+        axis.annotate(f'{at_base:.1f} \u2192 {at_last:.1f} kg\n'
+                      f'bei {reference:.0f} Nm',
+                      xy=(reference * 1.03, (at_base + at_last) / 2),
+                      fontsize=8.5, color='#C0392B', va='center')
 
         axis.set_title(title, fontsize=11.5)
-        axis.set_xlabel('Jahr')
+        axis.set_xlabel('Drehmoment [Nm]  (Segmentmitte)')
         axis.set_ylabel('kg je Motor')
-        axis.set_xlim(2017.5, max(fine))
         axis.set_ylim(bottom=0)
         axis.grid(alpha=0.22, lw=0.6)
-        axis.legend(fontsize=8.5, framealpha=0.95, loc='upper right')
+        axis.legend(fontsize=8, framealpha=0.95, loc='upper left', ncol=2)
 
-    figure.suptitle(
-        'Was gemessen wurde, und was das Modell daraus macht \u2014 in kg.\n'
-        'Grau: Drexlers 46 Maschinen 2018\u20132023.  Kreise: 11 Segmente '
-        '(Zenodo 2020, selbst eine Regression durch Drexler).  '
-        'Linien: Modell je Segment.', fontsize=11.5)
+    figure.suptitle('Masse gegen Drehmoment, je Jahr \u2014 '
+                    'gleiches Drehmoment, weniger Material.\n'
+                    'Punkte: 11 Segmente, Stand 2020.  '
+                    'Linien: Regression, verschoben mit der Materialeffizienz.',
+                    fontsize=12)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
