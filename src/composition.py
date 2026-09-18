@@ -141,86 +141,120 @@ def trends() -> pd.DataFrame:
 # weighs less than another's active parts is saying something no regression
 # through radial motors can say.
 MACHINES = [
+    # --- axial flux, shaft machines --------------------------------------
     dict(name='YASA P400 R', topology='axialFluxPM', maker='YASA (Mercedes-Benz)',
-         mass_kg=24.0, mass_basis='cartridge, dry, no housing',
-         torque_peak=370.0, torque_continuous=200.0,
-         power_peak_kw=160.0, power_continuous_kw=60.0,
-         speed_max_rpm=8000, cooling='oil, stator',
-         voltage='800 V controller, curves also for 400/550/250 V',
-         axial_length_mm=80.4, diameter_mm=305.0,
+         mass_kg=24.0, mass_basis='cartridge, dry, no housing, no gearbox',
+         torque_shaft=370.0, torque_continuous=200.0,
+         power_peak_kw=160.0, speed_max_rpm=8000,
+         gearbox_kg=None, gearbox='none in the data sheet',
+         cooling='oil, stator', voltage='800 V',
          source='YASA P400 R Product Sheet, Rev 13, June 2019, ID 22735',
-         url='yasa.com/media/2021/05/yasa-p400rdatasheet-rev-14.pdf'),
+         url='yasa.com'),
     dict(name='YASA P400 C', topology='axialFluxPM', maker='YASA (Mercedes-Benz)',
-         mass_kg=28.2, mass_basis='with housing, dry',
-         torque_peak=370.0, torque_continuous=200.0,
-         power_peak_kw=160.0, power_continuous_kw=100.0,
-         speed_max_rpm=8000, cooling='oil, stator',
-         voltage='800 V controller',
-         axial_length_mm=106.7, diameter_mm=305.0,
+         mass_kg=28.2, mass_basis='with housing, dry, no gearbox',
+         torque_shaft=370.0, torque_continuous=200.0,
+         power_peak_kw=160.0, speed_max_rpm=8000,
+         gearbox_kg=None, gearbox='none in the data sheet',
+         cooling='oil, stator', voltage='800 V',
          source='YASA P400 R Product Sheet, Rev 13, June 2019, ID 22735',
-         url='yasa.com/media/2021/05/yasa-p400rdatasheet-rev-14.pdf'),
-]
+         url='yasa.com'),
+    dict(name='Equipmake APM-200', topology='axialFluxPM', maker='Equipmake',
+         mass_kg=42.0, mass_basis='motor only, gearbox and inverter separate',
+         torque_shaft=450.0, torque_continuous=None,
+         power_peak_kw=220.0, speed_max_rpm=10000,
+         gearbox_kg=9.0, gearbox='integrated 5.5:1 epicyclic, 2475 Nm at the '
+                                 'driveshaft',
+         cooling='liquid, rotor, 60 C water/glycol', voltage='750 V DC',
+         source='Equipmake APM-200 product page', url='equipmake.com'),
 
-# ⚠️ DONUT LAB IS A WHEEL TORQUE AND CANNOT GO ON THE SAME AXIS.
-# The 21-inch in-wheel motor is 630 kW, 4300 Nm and 40 kg. That 4300 Nm is
-# torque AT THE WHEEL, produced with no gearbox at all. Every torque in the
-# consolidated dataset is MOTOR torque, upstream of a reduction of roughly
-# 8-10:1. Putting 4300 Nm beside 370 Nm would compare a wheel with a shaft
-# and make the in-wheel machine look seventeen times better than it is.
-#
-# Held here with `torque_is_wheel=True` so nothing can draw it by accident.
-# A fair comparison needs the radial machine's gearbox included and its motor
-# torque multiplied by the reduction ratio -- and the dataset does not carry
-# a reduction ratio, so that comparison is not available yet.
-WHEEL_MACHINES = [
+    # --- high torque, low speed: little or no reduction -------------------
+    # ⚠️ THESE ARE ON THE SAME AXIS AND DESIGNED FOR A DIFFERENT DUTY. Shaft
+    # torque is shaft torque for all of them, so they belong on one axis --
+    # Matthias 2026-09-18, and he is right that excluding one while keeping
+    # another was inconsistent. But a machine making 1500 Nm at about 950 rpm
+    # is not a machine making 370 Nm at 8000 rpm with a gearbox behind it: it
+    # trades iron for the gearbox it does not need. Compare the SYSTEM, motor
+    # plus reduction, or compare nothing.
+    dict(name='DeepDrive RM 1500', topology='dualRotorRadialPM',
+         maker='DeepDrive', mass_kg=32.0, mass_basis='motor',
+         torque_shaft=1500.0, torque_continuous=None,
+         power_peak_kw=150.0, speed_max_rpm=None,
+         gearbox_kg=None, gearbox='little or none, high torque low speed',
+         cooling=None, voltage=None,
+         source='DeepDrive RM series, compact class',
+         url='deepdrive.tech'),
+    dict(name='DeepDrive RM 1800', topology='dualRotorRadialPM',
+         maker='DeepDrive', mass_kg=35.0, mass_basis='motor',
+         torque_shaft=1800.0, torque_continuous=None,
+         power_peak_kw=180.0, speed_max_rpm=None,
+         gearbox_kg=None, gearbox='little or none, high torque low speed',
+         cooling=None, voltage=None,
+         source='DeepDrive RM series, medium and large cars',
+         url='deepdrive.tech'),
+    dict(name='DeepDrive RM 2400', topology='dualRotorRadialPM',
+         maker='DeepDrive', mass_kg=37.0, mass_basis='motor',
+         torque_shaft=2400.0, torque_continuous=None,
+         power_peak_kw=250.0, speed_max_rpm=None,
+         gearbox_kg=None, gearbox='little or none; also offered in-wheel',
+         cooling=None, voltage=None,
+         source='DeepDrive RM series', url='deepdrive.tech'),
     dict(name='Donut Lab 21" hypercar', topology='axialFluxPM in-wheel',
          maker='Donut Lab', mass_kg=40.0, mass_basis='whole in-wheel motor',
-         torque_wheel=4300.0, power_peak_kw=630.0, torque_is_wheel=True,
-         gearbox='none, direct drive',
+         torque_shaft=4300.0, torque_continuous=None,
+         power_peak_kw=630.0, speed_max_rpm=None,
+         gearbox_kg=0.0, gearbox='none, direct drive in the wheel',
+         cooling=None, voltage=None,
          source='Donut Lab motor family, CES 2025', url='donutlab.com/motor/'),
 ]
+
+# ⚠️ DEEPDRIVE ALSO STATES A MATERIAL CLAIM, and it is the only one of these
+# sources that does: the dual rotor uses **80% less iron and 50% less magnet
+# material**, and it can be built without rare earths. Stated as a comparison
+# with no baseline named, so it cannot be turned into kilograms -- but it is
+# the direction METHODOLOGY.md 4.2 argues for, from a manufacturer.
+DEEPDRIVE_MATERIAL_CLAIM = {
+    'iron_reduction': 0.80,
+    'magnet_reduction': 0.50,
+    'baseline': 'not stated by the source',
+    'rare_earth_free_possible': True,
+}
 
 # ⚠️ WHAT IS NOT HERE, AND THE PATTERN IN WHY.
 #
 #   YASA 750R       790 Nm peak, 200 kW, 98 mm axial -- MASS on request only
-#   DeepDrive       publishes no mass
+#   Equipmake       a widely repeated 31.4 kg for the APM-200, derived by
+#                   somebody from "7 kW/kg". THE PRODUCT PAGE SAYS 42 kg.
+#                   A number derived from a ratio is not a measurement, and
+#                   this one was wrong by a third.
 #   Valeo           EESM, hairpin stator, 210 mm diameter, combined
 #                   water/oil cooling, +30% power density, -30% CO2 vs PMSM,
 #                   SOP 2027 -- NO mass, NO torque
 #   Valeo + MAHLE   iBEE, brushless EESM, 220-350 kW peak, 800 V,
 #                   >40% lower production carbon -- NO mass, NO torque
 #   ZF              I2SM, in-rotor inductive excitation, 400 V and 800 V,
-#                   90 mm shorter than a conventional EESM, 15% lower rotor
-#                   transmission losses -- NO mass, NO torque
+#                   90 mm shorter than a conventional EESM -- NO mass
 #
 # THE PATTERN IS THE FINDING. Suppliers who sell motors as a COMPONENT to
 # integrators publish mass, because an integrator has to package it: YASA,
-# Donut Lab, Equipmake. Suppliers who sell into OEM programmes publish power
-# bands and advantages and never a mass, because the mass is negotiated per
-# programme and is commercially sensitive. So the magnet-free machines that
-# matter most for Europe -- Valeo, MAHLE, ZF -- are exactly the ones with no
-# public mass, and no amount of further searching changes that.
+# Equipmake, DeepDrive, Donut Lab. Suppliers who sell into OEM programmes
+# publish power bands and advantages and never a mass, because the mass is
+# negotiated per programme. So the magnet-free machines that matter most for
+# Europe -- Valeo, MAHLE, ZF -- are exactly the ones with no public mass, and
+# no amount of further searching changes that.
 #
-# What they DO establish, and it is not nothing: hairpin stators, combined
-# water and oil cooling, 800 V, and brushless excitation are all in
-# production or near it, which is direct evidence for the mechanisms in
-# METHODOLOGY.md 4.2 and 4.3.
+# What they DO establish: hairpin stators, combined water and oil cooling,
+# 800 V and brushless excitation are in production or near it, which is direct
+# evidence for the mechanisms in METHODOLOGY.md 4.2 and 4.3.
 
 
-def machines(include_wheel: bool = False) -> pd.DataFrame:
+def machines() -> pd.DataFrame:
     """
     The manufacturer data sheets, one row per machine.
 
-    `include_wheel` adds the in-wheel machines, whose torque is WHEEL torque
-    and therefore not comparable with the motor torque everything else uses.
-    Off by default so that the unsafe comparison has to be asked for.
+    ALL TORQUES ARE SHAFT TORQUE, which is what makes one axis legitimate.
+    Whether a reduction follows is a separate column, not a separate figure.
     """
-    rows = list(MACHINES) + (list(WHEEL_MACHINES) if include_wheel else [])
-    frame = pd.DataFrame(rows)
-    if 'torque_is_wheel' not in frame.columns:
-        frame['torque_is_wheel'] = False
-    frame['torque_is_wheel'] = frame.torque_is_wheel.fillna(False)
-    return frame
+    return pd.DataFrame(MACHINES)
 
 
 # ============================================================== 2 DRAWS
@@ -1355,19 +1389,24 @@ def figure_critical(frame: pd.DataFrame, params, out_path: str) -> str:
 
 def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
     """
-    The topologies against each other, at equal torque.
+    Every machine with a published mass, against shaft torque.
 
-    WHAT IS COMPARED: the machine without its gearbox -- stator, rotor,
-    windings, magnets, shaft and housing. The gearbox is inside the project's
-    boundary but outside this comparison, because the manufacturer data sheet
-    for the axial machine does not include one and comparing a motor with a
-    gearbox against a motor without one would be the whole finding.
+    ONE AXIS, AND IT IS SHAFT TORQUE. Whether a reduction follows is a
+    property of the machine, not a reason for a second figure -- Matthias
+    2026-09-18, after an earlier version kept YASA and excluded Donut Lab on a
+    gearbox argument that applied to both.
 
-    ⚠️ THE AXIAL POINT IS A WHOLE-MACHINE MASS, NOT A BILL OF MATERIAL. YASA
-    publishes what the machine weighs and not what it is made of, so it can be
-    drawn against the radial sum and cannot be broken down beside it. It bounds
-    the sum, which is what makes it worth having: any bill of material for an
-    axial machine has to fit underneath this point.
+    ⚠️ g/Nm IS NOT A FAIR FIGURE OF MERIT and is deliberately not plotted.
+    Across these machines it runs from 93 g/Nm at 450 Nm to 9 g/Nm at
+    4300 Nm, which is mostly geometry: torque grows with rotor radius squared
+    while mass grows closer to linearly, so any high-torque machine wins it
+    without being better. Machines are compared AT A TORQUE, or not at all.
+
+    ⚠️ THE RADIAL LINES STOP WHERE THEIR DATA STOPS. The consolidated sample
+    reaches about 870 Nm. A machine built for 1500 or 4300 Nm is not the same
+    machine scaled up -- it has a different diameter and a different duty --
+    so the regression is drawn only over the range it was fitted on, and the
+    high-torque machines are left standing on their own.
     """
     import matplotlib.pyplot as plt
 
@@ -1376,10 +1415,10 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
                    (current.parameterCode == params.data.material_of_component) &
                    (current.componentKeyLevel2 != 'gearBox')]
 
-    figure, axis = plt.subplots(figsize=(11, 6.4))
+    figure, axis = plt.subplots(figsize=(12.5, 6.8))
     colours = {'PMElectricMotors': '#8E44AD', 'EESMElectricMotors': '#2980B9',
                'IMandPMElectricMotors': '#16A085'}
-    slopes: dict[str, float] = {}
+    limit = 0.0
 
     for motor in params.run.motors:
         block = base[base.componentKeyLevel1 == motor].dropna(
@@ -1388,77 +1427,53 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
             continue
         block['torque'] = (block.torque_min + block.torque_max) / 2.0
         totals = block.groupby('torque')['meanValue'].sum()
-        slope, intercept = np.polyfit(np.asarray(totals.index, dtype=float),
-                                      totals.values, 1)
-        slopes[motor] = slope
-        span = np.linspace(0, max(totals.index) * 1.05, 40)
+        torques = np.asarray(totals.index, dtype=float)
+        slope, intercept = np.polyfit(torques, totals.values, 1)
+        limit = max(limit, torques.max())
+        span = np.linspace(torques.min() * 0.85, torques.max(), 40)
         colour = colours.get(motor, '#7F8C8D')
         axis.plot(span, intercept + slope * span, lw=2.4, color=colour,
-                  label=f'{MOTOR_LABEL.get(motor, motor)}  '
-                        f'({intercept + slope * 370:.0f} kg bei 370 Nm)')
-        axis.plot(totals.index, totals.values, 'o', ms=6, mfc='white',
-                  mec=colour, mew=1.5, ls='none')
+                  label=f'{MOTOR_LABEL.get(motor, motor)}, radial  '
+                        f'({intercept + slope * 450:.0f} kg bei 450 Nm)')
+        axis.plot(torques, totals.values, 'o', ms=6, mfc='white', mec=colour,
+                  mew=1.5, ls='none')
 
-    # ---- the axial machines, from the manufacturer ----------------------
-    # ⚠️ ONE POINT CANNOT CARRY A SLOPE. YASA publishes a single machine, so
-    # a line through it has to borrow its slope from somewhere. It borrows the
-    # MEAN OF THE RADIAL SLOPES: the assumption is that an axial machine needs
-    # material in proportion to torque the same way a radial one does, and
-    # only starts from a lower level. That is an assumption, not a
-    # measurement, and it is why the line is dashed.
-    spec = machines()
-    borrowed = float(np.mean(list(slopes.values()))) if slopes else 0.0
-    for _, row in spec.iterrows():
-        axis.plot([row.torque_peak], [row.mass_kg], marker='*', ms=20,
-                  color='#C0392B', mec='white', mew=1.2, ls='none', zorder=8)
-    if len(spec) and borrowed:
-        # Through the housed machine, which is the like-for-like one.
-        housed = spec.loc[spec.mass_kg.idxmax()]
-        offset = float(housed.mass_kg) - borrowed * float(housed.torque_peak)
-        # ⚠️ THE BORROWED SLOPE GIVES A NEGATIVE INTERCEPT, and that is the
-        # assumption failing rather than a drawing problem: carried down to
-        # zero torque it asserts a machine of negative mass. A radial motor's
-        # intercept is its shaft, end plates and housing, and an axial machine
-        # at this torque simply has less of all of it -- so the radial slope
-        # cannot also be the axial one all the way down. The line is drawn
-        # ONLY UPWARDS from the one machine that was measured, where the
-        # assumption is an extrapolation rather than a contradiction.
-        top = float(base.assign(
-            t=(base.torque_min + base.torque_max) / 2).t.max()) * 1.05
-        span = np.linspace(float(housed.torque_peak), top, 40)
-        axis.plot(span, offset + borrowed * span, lw=2.2, color='#C0392B',
-                  ls='--',
-                  label='Axialfluss, Steigung der radialen übernommen '
-                        f'(ab {housed.torque_peak:.0f} Nm, Annahme)')
-        axis.annotate(f'unterhalb {-offset / borrowed:.0f} Nm ergäbe diese\n'
-                      f'Annahme negative Masse \u2014 sie trägt nur nach oben',
-                      xy=(top * 0.52, offset + borrowed * top * 0.52 - 16),
-                      fontsize=8, color='#C0392B', ha='left', style='italic')
-    # One label for the pair: the two machines differ only by their housing,
-    # and two overlapping callouts at the same torque read as one smudge.
-    if len(spec):
-        low, high = spec.mass_kg.min(), spec.mass_kg.max()
-        torque = float(spec.torque_peak.iloc[0])
-        axis.annotate(
-            'YASA P400, Axialfluss\n'
-            f'{low:.0f} kg Kartusche / {high:.1f} kg mit Gehäuse\n'
-            f'{torque:.0f} Nm Spitze, ölgekühlt, 800 V',
-            xy=(torque, high), xytext=(torque - 150, high + 42),
-            fontsize=9, color='#C0392B', va='center',
-            arrowprops=dict(arrowstyle='->', color='#C0392B', lw=1.4))
-    axis.plot([], [], marker='*', ms=15, color='#C0392B', ls='none',
-              label='YASA P400, Datenblatt (Gesamtmaschine)')
+    styles = {'axialFluxPM': ('*', '#C0392B'),
+              'axialFluxPM in-wheel': ('P', '#E67E22'),
+              'dualRotorRadialPM': ('^', '#D35400')}
+    for topology, group in machines().groupby('topology'):
+        marker, colour = styles.get(topology, ('s', '#555555'))
+        axis.plot(group.torque_shaft, group.mass_kg, marker, ms=13,
+                  color=colour, mec='white', mew=1.1, ls='none', zorder=8,
+                  label=f'{topology}, Herstellerangabe')
+        for _, row in group.iterrows():
+            # P400 R and P400 C sit at the same torque; stagger them.
+            drop = -26 if row['name'].endswith('P400 R') else -11
+            axis.annotate(f'{row["name"].replace("Equipmake ", "").replace("DeepDrive ", "").replace("Donut Lab ", "")}  '
+                          f'{row.mass_kg:.0f} kg',
+                          xy=(row.torque_shaft, row.mass_kg),
+                          xytext=(8, drop), textcoords='offset points',
+                          fontsize=7.8, color=colour)
 
-    axis.set_xlabel('Drehmoment [Nm]')
-    axis.set_ylabel('Masse ohne Getriebe [kg]\n'
-                    'Stator, Rotor, Wicklung, Magnete, Welle, Gehäuse')
-    axis.set_xlim(0, None)
+    axis.axvspan(limit, 5000, color='#000000', alpha=0.045, lw=0)
+    axis.annotate('jenseits der Datenbasis\nder radialen Regression',
+                  xy=(limit * 1.35, 12), fontsize=8.5, color='#666666',
+                  style='italic')
+
+    axis.set_xscale('log')
+    axis.set_xlim(300, 5200)
     axis.set_ylim(0, None)
-    axis.grid(alpha=0.22, lw=0.6)
-    axis.legend(fontsize=9, framealpha=0.95, loc='upper left')
-    axis.set_title('Topologien bei gleichem MOTOR-Drehmoment, Stand 2020\n'
-                   'Die ganze Axialflussmaschine wiegt weniger als die '
-                   'Aktivteile einer radialen gleichen Drehmoments',
+    axis.set_xticks([400, 600, 900, 1500, 2400, 4300])
+    axis.set_xticks([], minor=True)
+    axis.get_xaxis().set_major_formatter(plt.FuncFormatter(lambda v, _: f'{v:.0f}'))
+    axis.set_xlabel('Drehmoment an der Motorwelle [Nm], log')
+    axis.set_ylabel('Motormasse ohne Getriebe [kg]')
+    axis.grid(alpha=0.22, lw=0.6, which='both')
+    axis.legend(fontsize=8.5, framealpha=0.95, loc='upper left')
+    axis.set_title('Alle Maschinen mit veröffentlichter Masse, '
+                   'gegen Wellendrehmoment\n'
+                   'Getriebe überall ausgeschlossen \u2014 g/Nm ist bewusst '
+                   'nicht aufgetragen: hohes Drehmoment gewinnt es von selbst',
                    fontsize=12)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
