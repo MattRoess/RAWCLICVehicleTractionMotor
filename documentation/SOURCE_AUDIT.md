@@ -169,9 +169,63 @@ component mass, any element, or any year other than 2020 — and it contains one
 systematic defect (blocking 1) that changes stator mass by 24% depending on
 which way it is read.
 
-**Nothing is corrected in code.** `src/source.py` reports; it does not patch.
-Each correction is a decision with a source behind it and belongs here, applied
-by the stage that builds the composition — not hidden in a loader.
+**The audit never corrects.** `src/source.py` reports. Corrections are declared
+in `src/corrections.py`, each with the evidence that establishes it, and applied
+by `03_apply_corrections.py`.
+
+**The source workbook is never edited.** It is a received deliverable under
+`documentation/`. The corrected dataset is written to `data/`, where it is
+plainly a product of this project and cannot be mistaken for what was handed
+over.
+
+---
+
+## Corrections applied 2026-09-18
+
+| | correction | rows | evidence |
+|---|---|---|---|
+| **C1** | lamination := `stator − windings` | 24 | `02_verify_stator.py` vs Drexler Fig. 11c |
+| **C2** | EESM rotor winding: rare earth → **copper** | 11 | Drexler: "sliding brushes and **copper sleeves**", 9 EESM rotors |
+| **C3** | EESM rotor winding **mass** | 0 | **NOT APPLIED — flagged** |
+| **C4** | `c-p` rows added for housing, gearBox, coolingSystem; housing material → aluminium | 78 | Consolidated description §3; Drexler §5.1.1 "cast aluminium" |
+| **C5** | induction rotor cage: copper → **aluminium** | 4 | Drexler: "**all eight** motors examined were made of aluminum", avg 2.26 kg |
+
+**Result: 53 findings → 18. Blocking: 38 → 0.**
+
+Verified rather than asserted — after correction, **72 of 72** components have
+materials summing to the component mass with a maximum deviation of `0`, and
+rare earth appears only under `permanentMagnets`.
+
+### C3 is deliberately not applied
+
+Drexler measures total rotor copper at **3.68 kg** (max 4.45, min 2.86, Fig.
+30b). The consolidated rows carry **7.53–10.88 kg** — two to three times the
+measured maximum — and the value is pinned at exactly `10.880000` across 8 of
+11 segments, which is a filled-down cell.
+
+So the mass is almost certainly wrong as well. It is **still not corrected**,
+because replacing a segment-resolved series with one benchmark average is a
+modelling decision rather than a correction, and the **1.5× segment-to-motor
+offset** established in `02_verify_stator.py` means the two are not directly
+comparable. `applied=False` is a real state in `src/corrections.py`: reported,
+carried in the output, changing nothing until somebody decides.
+
+**⚠️ This is the one open item. It needs a decision.**
+
+### What C5 also revealed
+
+The audit found `conductiveBars` as a *blank*. Drexler shows it is also the
+*wrong material*: the induction machine's short-circuit cage is aluminium, not
+copper, in all eight machines examined. A gap and a defect in the same rows —
+which is why the correction layer and the benchmark had to meet.
+
+### Still open after correction
+
+- **Rotor `c-p` is blank in all 26 rows.** Derivable by summing its materials,
+  but that is a decision, not a correction — the workbook declines to state it.
+- **Cooling mass is blank in all 26 rows** and is not derivable from anything
+  in the registry. §4.3 makes cooling architecture a scenario driver.
+- **No element layer**, and one vintage.
 
 ---
 
@@ -181,5 +235,8 @@ by the stage that builds the composition — not hidden in a loader.
 |---|---|
 | 2026-09-18 | The audit runs first and is kept as code, so a re-issued workbook is tested against the same list rather than against memory |
 | 2026-09-18 | The audit reports and never corrects; corrections are decisions, recorded here |
+| 2026-09-18 | C1, C2, C4, C5 applied — 38 blocking findings to 0, verified by 72/72 components summing exactly |
+| 2026-09-18 | The source workbook is never edited; corrections are declared in code and written to `data/` |
+| 2026-09-18 | **C3 (EESM rotor winding mass) NOT applied and OPEN** — measured 3.68 kg against 7.53–10.88 kg stated, but substituting a benchmark average is a modelling decision |
 | 2026-09-18 | Blocking 1 **RESOLVED** against Drexler 2025: the `c-p` row is the stator; the lamination cell holds the stator total. Motor mass unaffected, material split wrong |
 | 2026-09-18 | The 1.5x offset between segment averages and motor averages is sampling, not a defect — the same ratio appears on stator and rotor independently |
