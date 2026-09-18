@@ -497,6 +497,25 @@ def audit(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
                 f'value without one was entered rather than fitted',
                 rows=len(rows)))
 
+    # ------------------------------------------------------------------ 7c
+    # A MASS WITHOUT ITS TORQUE. Component mass in this dataset is a
+    # regression ON TORQUE, so a row whose torque is missing cannot be placed
+    # against any other row, compared with any benchmark, or projected on a
+    # per-Nm basis. It is a number without its explanatory variable.
+    if 'torque_min' in frame.columns:
+        filled_rows = frame.dropna(subset=['meanValue'])
+        no_torque = filled_rows[filled_rows.torque_min.isna()]
+        if not no_torque.empty:
+            for where, rows in no_torque.groupby(
+                    [no_torque.componentKeyLevel2.fillna('(none)'),
+                     no_torque.parameterCode.fillna('(none)')]):
+                findings.append(_finding(
+                    'no-torque', 'gap', '(various)', '(various)',
+                    f'{where[0]} / {where[1]}',
+                    f'{len(rows)} rows carry a mass and no torque, so the mass '
+                    f'cannot be compared with anything or expressed per Nm',
+                    rows=len(rows)))
+
     # ------------------------------------------------------------------ 8
     # ROWS THIS PROJECT HAS MARKED UNRELIABLE. Only present once corrections
     # have run. Reported by the audit so that a marked value cannot travel
@@ -914,6 +933,14 @@ def trajectory(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
     # answer 39 times over.
     base['materialClass'] = [material_class(row) for _, row in base.iterrows()]
 
+    # ⚠️ TORQUE IS THE EXPLANATORY VARIABLE, and it was in the workbook all
+    # along -- `torque_min` and `torque_max`, columns 42 and 43. Not using it
+    # is what made every earlier figure unreadable: mass plotted against the
+    # year shows the spread between vehicle SEGMENTS, which is size, and hides
+    # the only thing being modelled, which is mass per unit of torque.
+    base['torque'] = (base.torque_min + base.torque_max) / 2.0
+    base['torqueSpan'] = base.torque_max - base.torque_min
+
     out = []
     for volts, copper_factor in params.scenario.copper_mass.items():
         for year in years:
@@ -935,6 +962,9 @@ def trajectory(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
             block['trajectoryFactor'] = factors
             for column in value_columns:
                 block[column] = block[column] * factors
+            # The figure that matters: kg per Nm. A mass without its torque is
+            # not comparable to anything.
+            block['massPerTorque'] = block.meanValue / block.torque
             measured = params.data.year_is_measured(year)
             block['yearIsMeasured'] = measured
             block['yearBasis'] = (

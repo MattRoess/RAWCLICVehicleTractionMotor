@@ -84,12 +84,31 @@ never contained, up to 52.72 kg against a measured maximum of 35.52 kg.
 > stator total, and the true lamination is `stator − windings`.
 > **Total motor mass is unaffected; the material split is wrong.**
 
-**The remaining offset is sampling, not a second defect.** Consolidated
-segment averages run heavier than Drexler's motor averages — **1.51×** for the
-stator lamination and **1.50×** for the rotor lamination. Two independent
-components giving the same ratio is what a sampling difference looks like:
-segments including large vans, against 48 individual motors including small
-ones. A further defect would not land on both at the same factor.
+**The remaining offset is TORQUE, and the workbook said so all along.**
+
+Consolidated segment averages run heavier than Drexler's motor averages —
+1.51× for the stator lamination, 1.50× for the rotor. This was first recorded
+as "a sampling difference". It is more specific than that, and the columns to
+show it (`torque_min`, `torque_max`) were in the workbook from the start and
+went unused.
+
+Fitting mass against torque on the consolidated values:
+
+| | stator lamination | rotor lamination |
+|---|---|---|
+| regression | `6.13 + 0.0362 × Nm` | `3.46 + 0.0251 × Nm` |
+| Zenodo mean torque | **524 Nm** → 25.1 kg | 524 Nm → 16.6 kg |
+| Drexler's mean mass sits at | **290 Nm** | **303 Nm** |
+
+**290 Nm and 303 Nm are ordinary passenger-car torques**, which is exactly what
+a 2018–2023 passenger-car sample should average. The consolidated dataset
+averages 524 Nm because it includes light commercial segments JB–JF that
+Drexler's sample does not contain.
+
+Two independent components landing on the same implied torque, ±5%, is what
+says this is the explanation and not a coincidence. **There is no unexplained
+offset.** The two sources agree once mass is expressed per Nm — which is also
+the only basis on which they *can* be compared.
 
 ## Blocking 2 — rare earth in the motor built to avoid it
 
@@ -313,4 +332,5 @@ which is why the correction layer and the benchmark had to meet.
 | 2026-09-18 | A flag does not close a finding — `zero-interval` stays blocking after marking, because marking a defect is not fixing it |
 | 2026-09-18 | New standing check `zero-interval`: 10 of 192 filled rows have p025 == p975, so they were entered rather than fitted — the dataset contradicting itself, needing no external source |
 | 2026-09-18 | Blocking 1 **RESOLVED** against Drexler 2025: the `c-p` row is the stator; the lamination cell holds the stator total. Motor mass unaffected, material split wrong |
-| 2026-09-18 | The 1.5x offset between segment averages and motor averages is sampling, not a defect — the same ratio appears on stator and rotor independently |
+| 2026-09-18 | ~~The 1.5x offset is sampling~~ **PRECISED**: it is TORQUE. Drexler's mean sits at 290/303 Nm on the consolidated regression, Zenodo averages 524 Nm because it includes vans. No unexplained offset remains |
+| 2026-09-18 | `torque_min`/`torque_max` were in the workbook from the start and went unused — mass is a regression ON torque, so mass against the year shows segment size and hides the model |
