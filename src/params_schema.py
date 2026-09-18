@@ -64,7 +64,7 @@ class DataParams:
     # Written from the project root.
     # SAFE TO CHANGE: yes -- it must point at a file that exists.
     consolidated_file: str = (
-        'documents/TractionMotor/Zenodo/RAWCLIC_BEV_motor_consolidated_data_V1.xlsx')
+        'documentation/TractionMotor/Zenodo/RAWCLIC_BEV_motor_consolidated_data_V1.xlsx')
 
     # The sheet holding the rows. The other sheet, `Guideline`, documents the
     # 43 columns and is not read.
@@ -170,7 +170,8 @@ class RunParams:
 class OutputParams:
     """Where what this project produces is written."""
 
-    # WHAT THE STAGES WRITE. Not `documents/`, which holds what was received.
+    # WHAT THE STAGES WRITE. Not `documentation/`, which holds what was
+    # received and what is written about it.
     # SAFE TO CHANGE: yes.
     data_dir: str = 'data'
 

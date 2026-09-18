@@ -14,7 +14,7 @@ edit this file, and do not edit `params.xlsx`. Both are outputs.
 
 | Parameter | Value | What it does |
 |---|---|---|
-| `data.consolidated_file` | `documents/TractionMotor/Zenodo/RAWCLIC_BEV_motor_consolidated_data_V1.xlsx` | THE CONSOLIDATED DATASET, and the only measured source this project has. Written from the project root. SAFE TO CHANGE: yes -- it must point at a file that exists. |
+| `data.consolidated_file` | `documentation/TractionMotor/Zenodo/RAWCLIC_BEV_motor_consolidated_data_V1.xlsx` | THE CONSOLIDATED DATASET, and the only measured source this project has. Written from the project root. SAFE TO CHANGE: yes -- it must point at a file that exists. |
 | `data.consolidated_sheet` | `consolidated_data` | The sheet holding the rows. The other sheet, `Guideline`, documents the 43 columns and is not read. SAFE TO CHANGE: yes. |
 | `data.composition_file` | `` | THE ELEMENT COMPOSITION, when it arrives. Derived from the consolidated dataset rather than from anywhere else, so it inherits its boundaries. BLANK MEANS NOT YET. A stage that needs elements says so and stops, rather than inventing them: the consolidated file has no element layer, and a model that quietly proceeds without one reports a motor made of nothing but materials. SAFE TO CHANGE: yes. |
 | `data.composition_sheet` | `` | Setting in DataParams. |
@@ -35,5 +35,5 @@ edit this file, and do not edit `params.xlsx`. Both are outputs.
 
 | Parameter | Value | What it does |
 |---|---|---|
-| `output.data_dir` | `data` | WHAT THE STAGES WRITE. Not `documents/`, which holds what was received. SAFE TO CHANGE: yes. |
+| `output.data_dir` | `data` | WHAT THE STAGES WRITE. Not `documentation/`, which holds what was received and what is written about it. SAFE TO CHANGE: yes. |
 | `output.figures_dir` | `figures` | SAFE TO CHANGE: yes. |
