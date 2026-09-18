@@ -81,8 +81,8 @@ central complaint:
 > hairpin winding at scale, heavy-rare-earth reduction as a design driver, and
 > both new architectures here. Recorded so that they are not proposed again.
 >
-> **Its material compositions are admissible** -- see §2.1. Composition-only,
-> at matched architecture.
+> **It is kept as a verification source** -- see §2.1. Nothing from it enters
+> the dataset; it is used to check values established elsewhere.
 
 Its **method** is still the right idea — scale a bill of material by torque
 rather than quote one reference motor — and §2.2 below takes that idea without
@@ -111,20 +111,50 @@ material split of a 2030 hairpin stator, because the winding technology
 changed underneath it.
 
 **Settled 2026-09-18.** The 2017/2018 Chalmers inventory, the 2020 Munro
-benchmark and GREET are **composition-only sources**:
+benchmark and GREET are **verification sources, not data sources**:
 
-> **Use them for `m-c` and `e-m`. Never for `c-p`.**
+> **No number from any of the three enters the dataset. Not a mass, not a
+> material split, not an element fraction. They are used to check values that
+> were established from admissible sources, and for nothing else.**
 
-Not a preference to weigh against other considerations -- a hard gate. No mass,
-no kg, no "motor weighs", no component total may be taken from any of the
-three, in any scenario, at any year, however convenient the gap it would fill.
-What may be taken is what a material is made of, cited by source and year.
+This is stricter than composition-only, and deliberately so. A source that is
+too old to supply a mass is also too old to be quietly holding up an `e-m` row
+that nobody has checked against a primary source. The dataset has to stand on
+its own sources; these three tell us whether it stands.
 
-If a mass is missing and one of these three is the only place it appears, that
-mass stays missing and gets **derived** per §2.2 instead. A derived mass with a
-stated method is admissible; a borrowed 2018 mass is not, because it silently
-fixes a 2018 design into a 2030 or 2060 row and the whole time dimension of
-this model is the claim that the design does not stay fixed.
+### What a verification source is for
+
+1. An `m-c` or `e-m` value is established from an **admissible** source --
+   supplier datasheet, standard, current open literature, or derivation with a
+   stated method.
+2. It is **then** compared against Chalmers, Munro 2020 or GREET.
+3. Agreement is recorded as a check passed. Disagreement is recorded as a
+   **flag**, and the flag is resolved against the admissible sources -- never
+   by moving the value towards the old one.
+
+The comparison has to be written down somewhere, or the check is not
+reproducible and is therefore not a check. It belongs in **documentation, not
+in the workbook** -- a verification table citing source, year and the two
+values. Nothing in `data/` ever carries one of these numbers.
+
+### Where the composition actually comes from, then
+
+This costs nothing, because the primary sources are better anyway and are
+already in hand:
+
+| layer | admissible source |
+|---|---|
+| electrical steel `e-m` | **JFE and Nippon Steel** technical reports -- 3.0-4.5 wt% Si, 0.15-2.5 wt% Al |
+| NdFeB `e-m` | magnet grade datasheets and the Nd2Fe14B stoichiometry; Dy/Tb by grade per §4.2 |
+| copper, aluminium, insulation `e-m` | standards and supplier specification |
+| rare earth per motor | **JRC** -- 1-3 kg NdPr, up to 200 g Dy |
+| `c-p` masses | derived per §2.2, from current ratings and current architecture |
+
+A mass or a composition that no admissible source supports stays missing and
+gets derived with a stated method. A derived value is admissible; a borrowed
+one is not, because a 2018 number silently fixes a 2018 design into a 2030 or
+2060 row, and the whole time dimension of this model is the claim that the
+design does not stay fixed.
 
 ### 2.2 Recent bills of material do not exist in public, and that is the finding
 
@@ -137,7 +167,7 @@ Where the current numbers actually are:
 | | holds it | usable |
 |---|---|---|
 | **Munro Live** (YouTube) | **current teardowns, free** — see 2.3 | **yes**, and it is the best recent source found |
-| **A2MAC1**; Munro's written reports | current teardowns, component by component | commercial. Munro's 10-motor comparison is **2020** and paid — **composition only**, never masses, §2.1 |
+| **A2MAC1**; Munro's written reports | current teardowns, component by component | commercial. Munro's 10-motor comparison is **2020** and paid — **verification only**, §2.1 |
 | **IDTechEx** | architecture shares and trends | commercial; already cited by the review |
 | **ORNL / DOE VTO** | public teardowns, real weighed parts | the motor teardowns are older; recent work is inverters and drive units |
 | **OEM technical papers** | one machine each, well documented | scattered, and rarely a full BOM |
@@ -161,12 +191,13 @@ has no magnets.
 
 ### 2.4 What is freely available and current
 
-These carry numbers, cost nothing, and are current enough to use. In the order
-worth pulling:
+These carry numbers and cost nothing. The status column says which are
+**admissible** -- may supply dataset values -- and which are **verification
+only** per §2.1.
 
 | source | what it gives | status |
 |---|---|---|
-| **R&D GREET**, Argonne | **vehicle material composition by component**, traction motor included, free download, updated annually | **pull first.** The vehicle-material-composition module is the closest thing to a free BOM that exists |
+| **R&D GREET**, Argonne | vehicle material composition by component, traction motor included, free, updated annually | **verification only, §2.1.** Still worth pulling — it is the broadest free cross-check that exists — but no GREET number enters the dataset |
 | **JRC**, *The role of rare earth elements in wind energy and electric mobility* and the 2024-25 CRM reports | rare earth per motor; already cited by the critical review, so already vetted | free PDFs |
 | **IEA**, critical minerals and rare earth reports | demand and intensity, already vetted by the review | free |
 | **JFE Steel**, **Nippon Steel** technical reports | what non-oriented electrical steel IS: **3.0-4.5 wt% Si, 0.15-2.5 wt% Al** | free PDFs, current |
@@ -337,7 +368,9 @@ Tb raise. If a different quantity was meant, this section changes.
 | 2026-09-18 | Zenodo is tier 1 and the only measured source; everything else is tier 2 and labelled |
 | 2026-09-18 | The 2017/2018 Chalmers inventory is REJECTED as too old — its method is kept, its numbers are not |
 | 2026-09-18 | **Age is judged per layer**: `c-p` masses must be recent, `m-c` and `e-m` compositions do not expire |
-| 2026-09-18 | Chalmers, Munro 2020 and GREET are **composition-only sources** — `m-c` and `e-m` yes, `c-p` never. A missing mass is derived, not borrowed |
+| 2026-09-18 | Chalmers, Munro 2020 and GREET are **verification sources, not data sources** — no number from any of them enters the dataset, at any layer |
+| 2026-09-18 | Verification comparisons are written in documentation, never in `data/`; a disagreement is resolved against the admissible sources, never towards the old one |
+| 2026-09-18 | Composition comes from supplier datasheets and standards; a value no admissible source supports is derived with a stated method, not borrowed |
 | 2026-09-18 | No recent public motor-only BOM exists in writing; bills of material are DERIVED from current ratings and current material shares |
 | 2026-09-18 | Munro REJECTED — the videos do not weigh parts, the written benchmark is 2020 and paid |
 | 2026-09-18 | Free and current sources only: GREET first, then JRC, IEA, steel-supplier datasheets and OEM statements |
