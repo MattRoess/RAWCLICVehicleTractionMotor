@@ -95,13 +95,34 @@ Where the current numbers actually are:
 
 | | holds it | usable |
 |---|---|---|
-| **A2MAC1**, **Munro & Associates** | current teardowns, component by component | **commercial**. Munro tore down the magnet-free Nissan Ariya motor in 2025 |
+| **Munro Live** (YouTube) | **current teardowns, free** — see 2.2 | **yes**, and it is the best recent source found |
+| **A2MAC1**; Munro's written reports | current teardowns, component by component | commercial. Munro's 10-motor comparison is **2020** and paid — old by the same test that rejected Chalmers |
 | **IDTechEx** | architecture shares and trends | commercial; already cited by the review |
 | **ORNL / DOE VTO** | public teardowns, real weighed parts | the motor teardowns are older; recent work is inverters and drive units |
 | **OEM technical papers** | one machine each, well documented | scattered, and rarely a full BOM |
 | **Steel and magnet suppliers** | what the material IS | **public and current** — JFE and Nippon Steel give non-oriented electrical steel as 3.0–4.5 wt% Si, 0.15–2.5 wt% Al |
 
-**So the realistic route is to derive, not to find.** Two things ARE public and
+### 2.2 Munro Live is the recent source, and it is on video
+
+Munro & Associates publish teardowns on YouTube as they do them. They are
+current, free, and they cover the machines this project needs — including two
+of the five motors:
+
+| teardown | when | why it matters here |
+|---|---|---|
+| **YASA YM360 axial flux** | May 2026 | architecture, rotor and stator design, **cooling strategy**, material selection, against radial flux |
+| **BYD iDM-210 drive unit** | March 2026 | a Chinese drive unit — the other side of the §4.3 geography |
+| **Nissan Ariya magnet-free motor** | August 2025 | a production machine with no magnets at all |
+| VW ID.4 | | hairpin winding raises slot copper density **46% → 60%** |
+| Tesla Model S Plaid | | carbon-wrapped rotor, isolated pole cap |
+
+⚠️ **THE NUMBERS ARE SPOKEN AND ON SCREEN, NOT IN A TABLE.** A teardown video
+states a weight as it is weighed. Getting those into this project is manual
+watching and note-taking; it cannot be fetched. Each figure taken from a video
+must be recorded with the video, the date and the timestamp, or it is an
+unsourced number with a story attached.
+
+**Beyond the videos, derive rather than find.** Two things ARE public and
 current, and together they give a bill of material without any old inventory:
 
 1. **Motor ratings and masses**, per machine, from OEM and supplier statements
@@ -265,7 +286,8 @@ Tb raise. If a different quantity was meant, this section changes.
 |---|---|
 | 2026-09-18 | Zenodo is tier 1 and the only measured source; everything else is tier 2 and labelled |
 | 2026-09-18 | The 2017/2018 Chalmers inventory is REJECTED as too old — its method is kept, its numbers are not |
-| 2026-09-18 | No recent public motor-only BOM exists; bills of material are DERIVED from current ratings and current material shares |
+| 2026-09-18 | No recent public motor-only BOM exists in writing; bills of material are DERIVED from current ratings and current material shares |
+| 2026-09-18 | Munro Live's video teardowns are the recent source — free and current, extracted by hand, each figure cited to video, date and timestamp |
 | 2026-09-18 | Five motors: three from the dataset, axial flux and dual-rotor radial added as tier 2 |
 | 2026-09-18 | DeepDrive is dual-rotor **radial** flux, checked against the company's own description |
 | 2026-09-18 | Gearbox is inside the boundary; power electronics is not |
