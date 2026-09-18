@@ -1442,20 +1442,38 @@ def figure_factors(params, out_path: str, current: pd.DataFrame = None) -> str:
 
 
 def figure_motor_mass(frame: pd.DataFrame, params, out_path: str) -> str:
-    """Total motor mass by material, per motor type, over time."""
+    """
+    The composition of each motor type over time -- the stock-and-flow output.
+
+    ONE PANEL PER MOTOR TYPE, materials stacked, 2020 to 2070. This is what
+    the stock-and-flow model multiplies a fleet by, so it is drawn the way it
+    will be used: kilograms per vehicle, by material, per year.
+
+    ⚠️ SEGMENT D, because it is the only segment all three radial topologies
+    share. PMSM and EESM cover A-F and JB-JE; the induction machine appears in
+    D, JC and JD only. Picking C would have silently dropped the induction
+    machine, which an earlier version of this figure did.
+
+    ⚠️ THE AXIAL MACHINES HAVE NO COMPOSITION AND ARE NOT DRAWN HERE. Their
+    makers publish a whole-machine mass and nothing about what is inside it,
+    so a stacked bar for them would be invention. They appear in
+    04_topologies.png as the single number they actually are.
+    """
     import matplotlib.pyplot as plt
 
-    # One segment, so the figure shows the TRAJECTORY and not the spread
-    # between segments. C is the largest passenger class in the sample.
-    rows = frame[(frame.productKeyLevel3 == 'C') &
-                 (frame.parameterCode == params.data.material_of_component) &
+    segment = 'D'
+    rows = frame[(frame.productKeyLevel3 == segment) &
                  (frame.voltageClass == params.scenario.base_voltage) &
+                 (frame.parameterCode == params.data.material_of_component) &
                  (frame.productionYear >= params.scenario.base_year)]
     motors = [m for m in params.run.motors if m in set(rows.componentKeyLevel1)]
+    if not motors:
+        motors = sorted(set(rows.componentKeyLevel1))
 
-    figure, axes = plt.subplots(1, len(motors), figsize=(5.0 * len(motors), 5.4),
-                                sharey=True)
-    axes = np.atleast_1d(axes)
+    figure, axes = plt.subplots(1, len(motors),
+                                figsize=(4.9 * len(motors), 5.4), sharey=True,
+                                squeeze=False)
+    axes = axes[0]
 
     for axis, motor in zip(axes, motors):
         block = rows[rows.componentKeyLevel1 == motor]
@@ -1465,16 +1483,35 @@ def figure_motor_mass(frame: pd.DataFrame, params, out_path: str) -> str:
         axis.stackplot(pivot.index, *[pivot[k] for k in order],
                        colors=[MATERIAL_COLOUR[k] for k in order],
                        labels=[MATERIAL_LABEL[k] for k in order], alpha=0.92)
-        _mark_measured(axis, params, list(pivot.index))
-        axis.set_title(motor, fontsize=11)
+
+        first, last = pivot.sum(axis=1).iloc[0], pivot.sum(axis=1).iloc[-1]
+        axis.annotate(f'{first:.0f} kg', xy=(pivot.index[0], first),
+                      xytext=(4, 6), textcoords='offset points', fontsize=9,
+                      weight='bold')
+        axis.annotate(f'{last:.0f} kg\n({last / first - 1:+.0%})',
+                      xy=(pivot.index[-1], last), xytext=(-40, 8),
+                      textcoords='offset points', fontsize=9, weight='bold')
+
+        unreliable = block[block.get('reliability', '') == 'unreliable'] \
+            if 'reliability' in block.columns else block.iloc[0:0]
+        title = MOTOR_LABEL.get(motor, motor)
+        if not unreliable.empty:
+            title += '\n⚠ enthält eine als unsicher markierte Masse'
+        axis.set_title(title, fontsize=10.5)
         axis.set_xlabel('Jahr')
         axis.grid(alpha=0.22, lw=0.6)
-    axes[0].set_ylabel('Masse je Motor, Segment C  [kg]')
-    for axis in axes:
-        axis.legend(loc='upper right', fontsize=8.5, framealpha=0.95)
-    figure.suptitle('Motorzusammensetzung über die Zeit, Segment C — '
-                    'rote Linie: einziges gemessenes Jahr', fontsize=12.5)
-    figure.tight_layout()
+
+    axes[0].set_ylabel(f'kg je Fahrzeug, Segment {segment}')
+    handles, labels = axes[0].get_legend_handles_labels()
+    figure.legend(handles, labels, loc='lower center', ncol=5, fontsize=9,
+                  frameon=False, bbox_to_anchor=(0.5, -0.012))
+    figure.suptitle(
+        f'Zusammensetzung je Motortyp über die Zeit, Segment {segment}, '
+        f'{params.scenario.base_voltage} V \u2014 Eingang für das '
+        f'Stock-and-Flow-Modell\n'
+        'Nur 2020 ist gemessen; alles danach folgt scenario.floor und '
+        'scenario.initial_rate', fontsize=11.5)
+    figure.tight_layout(rect=(0, 0.055, 1, 1))
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
     return out_path
