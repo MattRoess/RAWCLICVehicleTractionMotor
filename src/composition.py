@@ -1155,3 +1155,94 @@ def figure_critical(frame: pd.DataFrame, params, out_path: str) -> str:
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
     return out_path
+
+
+def figure_datapoints(current: pd.DataFrame, params, out_path: str) -> str:
+    """
+    Every measured number this project actually has, in kilograms.
+
+    NOT A MODEL. No curve, no floor, no rate -- only what a source states.
+    Drexler's sample statistics with their named extreme vehicles, and the
+    consolidated dataset's per-segment values at its single vintage.
+
+    THE POINT IS HOW LITTLE THERE IS. Everything else in this project is
+    built on these points, and a figure of them is the honest answer to
+    "what do we know".
+    """
+    import matplotlib.pyplot as plt
+
+    bench = components().set_index('part')
+    panels = [
+        ('statorSheetLaminationStack', 'lamination', 'Stator-Blechpaket',
+         lambda f: (f.componentKeyLevel3 == 'statorSheetLaminationStack')),
+        ('windings.roundWire', 'copper', 'Stator-Wicklung (Kupfer)',
+         lambda f: ((f.componentKeyLevel2 == 'stator') &
+                    (f.componentKeyLevel3 == 'windings'))),
+        ('rotorSheetLaminationStack', 'lamination', 'Rotor-Blechpaket',
+         lambda f: (f.componentKeyLevel3 == 'rotorSheetLaminationStack')),
+    ]
+
+    figure, axes = plt.subplots(1, 3, figsize=(15, 5.8))
+    base = current[current.voltageClass == params.scenario.base_voltage]
+
+    for axis, (part, klass, title, picker) in zip(axes, panels):
+        colour = MATERIAL_COLOUR[klass]
+
+        # ---- Drexler: the sample, as a span with its named extremes -----
+        if part in bench.index:
+            row = bench.loc[part]
+            low, high, mean = float(row['min']), float(row['max']), float(row['mean'])
+            axis.fill_betweenx([low, high], 2018, 2023, color=colour, alpha=0.16,
+                               lw=0, zorder=1)
+            axis.hlines(mean, 2018, 2023, color=colour, lw=2.4, zorder=3)
+            axis.plot([2020.5], [low], marker='v', color=colour, ms=9, zorder=4)
+            axis.plot([2020.5], [high], marker='^', color=colour, ms=9, zorder=4)
+            n = '' if pd.isna(row['n']) else f", n={int(row['n'])}"
+            axis.annotate(f'{row["max_vehicle"]}\n{high:.1f} kg',
+                          xy=(2023.3, high), fontsize=7.4, va='center',
+                          color='#333333')
+            axis.annotate(f'{row["min_vehicle"]}\n{low:.1f} kg',
+                          xy=(2018.2, low), fontsize=7.4, va='bottom',
+                          ha='left', color='#333333')
+            axis.annotate(f'Drexler 2025\nStichprobe 2018–2023{n}\n'
+                          f'Mittel {mean:.1f} kg',
+                          xy=(2018.2, high * 0.97), fontsize=7.8, va='top',
+                          color=colour)
+
+        # ---- the consolidated dataset, every segment at its one vintage --
+        rows = base[picker(base) &
+                    (base.parameterCode == params.data.material_of_component) &
+                    (base.productionYear == params.scenario.base_year)]
+        for motor, group in rows.groupby('componentKeyLevel1'):
+            values = group.meanValue.dropna()
+            if values.empty:
+                continue
+            marker = {'PMElectricMotors': 'o', 'EESMElectricMotors': 's',
+                      'IMandPMElectricMotors': 'D'}.get(motor, 'o')
+            jitter = {'PMElectricMotors': -0.45, 'EESMElectricMotors': 0.0,
+                      'IMandPMElectricMotors': 0.45}.get(motor, 0.0)
+            axis.plot([2026.5 + jitter] * len(values), values, marker,
+                      ms=5.5, mfc='white', mec=colour, mew=1.4, ls='none',
+                      zorder=5,
+                      label=f'{motor.replace("ElectricMotors", "")} '
+                            f'({len(values)} Segmente)')
+        axis.annotate('Zenodo 2020, je Segment', xy=(2028.9, axis.get_ylim()[0]),
+                      fontsize=7.8, ha='right', va='bottom', color='#666666')
+
+        axis.set_title(title, fontsize=11.5)
+        axis.set_ylabel('kg je Motor')
+        axis.set_xlim(2017.4, 2029.5)
+        axis.set_xticks([2020.5, 2026.5])
+        axis.set_xticklabels(['Drexler\n2018–2023', 'Zenodo\n2020'])
+        axis.grid(alpha=0.22, lw=0.6, axis='y')
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    figure.legend(handles, labels, loc='lower center', ncol=3, fontsize=9,
+                  frameon=False, bbox_to_anchor=(0.5, -0.015))
+
+    figure.suptitle('Alle gemessenen Datenpunkte, die dieses Projekt hat — '
+                    'kein Modell, keine Kurve', fontsize=13)
+    figure.tight_layout()
+    figure.savefig(out_path, dpi=160)
+    plt.close(figure)
+    return out_path
