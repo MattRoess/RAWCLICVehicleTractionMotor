@@ -82,10 +82,39 @@ central complaint:
 > architectures here. Recorded so that it is not proposed again.
 
 Its **method** is still the right idea — scale a bill of material by torque
-rather than quote one reference motor — and §2.1 below takes that idea without
+rather than quote one reference motor — and §2.2 below takes that idea without
 taking its numbers.
 
-### 2.1 Recent bills of material do not exist in public, and that is the finding
+### 2.1 Age applies to the weights, not to the composition
+
+**A source's age has to be judged per layer, because the three layers of the
+schema age at completely different rates.**
+
+| layer | what it says | does it age |
+|---|---|---|
+| `c-p` component of product | how many kg of stator, rotor, housing, gearbox in a motor | **yes, fast.** This is the whole point of 2010-2070: same torque, less material. A 2018 mass is a 2018 design |
+| `m-c` material of component | how the stator splits into electrical steel, copper, insulation, potting | **slowly.** It moves when the architecture moves -- hairpin winding, oil cooling, a magnet-free rotor -- and those are architecture changes the scenarios already carry explicitly |
+| `e-m` element of material | what NdFeB, electrical steel or winding copper IS, element by element | **essentially not at all.** Chemistry is chemistry. Nd2Fe14B has the stoichiometry it has. Non-oriented electrical steel is 3.0-4.5 wt% Si because of core loss physics, not because of the model year |
+
+So the rule is:
+
+> **Recency is required for `c-p`. Older sources remain admissible for `m-c`
+> and `e-m`, provided the architecture they describe is the architecture being
+> described.**
+
+That last clause is the guard. A 2018 round-wire stator is a valid source for
+what copper and lamination steel are, and **not** a valid source for the
+material split of a 2030 hairpin stator, because the winding technology
+changed underneath it.
+
+**What this reinstates.** The 2017/2018 Chalmers inventory and the 2020 Munro
+benchmark were rejected on 2026-09-18 for being too old. That rejection stands
+for their **masses**, which is what it was about. Their **element compositions
+of the materials** do not expire and can be used, cited by source and year.
+Same for GREET's material definitions. **Flagging this rather than acting on
+it silently -- say if the rejection was meant to cover the whole source.**
+
+### 2.2 Recent bills of material do not exist in public, and that is the finding
 
 Searched 2026-09-18. **No recent, complete, motor-only bill of material at a
 matched rating is published for any of the five motors.** This is the same gap
@@ -95,14 +124,14 @@ Where the current numbers actually are:
 
 | | holds it | usable |
 |---|---|---|
-| **Munro Live** (YouTube) | **current teardowns, free** — see 2.2 | **yes**, and it is the best recent source found |
+| **Munro Live** (YouTube) | **current teardowns, free** — see 2.3 | **yes**, and it is the best recent source found |
 | **A2MAC1**; Munro's written reports | current teardowns, component by component | commercial. Munro's 10-motor comparison is **2020** and paid — old by the same test that rejected Chalmers |
 | **IDTechEx** | architecture shares and trends | commercial; already cited by the review |
 | **ORNL / DOE VTO** | public teardowns, real weighed parts | the motor teardowns are older; recent work is inverters and drive units |
 | **OEM technical papers** | one machine each, well documented | scattered, and rarely a full BOM |
 | **Steel and magnet suppliers** | what the material IS | **public and current** — JFE and Nippon Steel give non-oriented electrical steel as 3.0–4.5 wt% Si, 0.15–2.5 wt% Al |
 
-### 2.2 Munro Live: rejected 2026-09-18
+### 2.3 Munro Live: rejected 2026-09-18
 
 Munro & Associates publish current teardowns on YouTube -- YASA YM360 axial
 flux in May 2026, BYD iDM-210 in March 2026, the magnet-free Nissan Ariya in
@@ -118,7 +147,7 @@ Recorded so that neither is proposed again. What the videos are still good for
 is qualitative: which machine is oil-cooled, which uses hairpin winding, which
 has no magnets.
 
-### 2.3 What is freely available and current
+### 2.4 What is freely available and current
 
 These carry numbers, cost nothing, and are current enough to use. In the order
 worth pulling:
@@ -132,7 +161,7 @@ worth pulling:
 | **OEM and supplier statements** | rating, mass, voltage class, cooling, per machine. **Valeo sells a high-voltage rare-earth-magnet-free motor**; Renault-Valeo E7A; BMW Gen5/Gen6 | free, and the only current per-machine data |
 | **MDPI Machines 2025**, *Electric Vehicle Motors Free of Rare-Earth Elements* | the architecture landscape without NdFeB | open access |
 
-### 2.4 Figures already in hand from those sources
+### 2.5 Figures already in hand from those sources
 
 | | |
 |---|---|
@@ -295,6 +324,7 @@ Tb raise. If a different quantity was meant, this section changes.
 |---|---|
 | 2026-09-18 | Zenodo is tier 1 and the only measured source; everything else is tier 2 and labelled |
 | 2026-09-18 | The 2017/2018 Chalmers inventory is REJECTED as too old — its method is kept, its numbers are not |
+| 2026-09-18 | **Age is judged per layer**: `c-p` masses must be recent, `m-c` and `e-m` compositions do not expire — so rejected sources stay usable for element composition, at matched architecture |
 | 2026-09-18 | No recent public motor-only BOM exists in writing; bills of material are DERIVED from current ratings and current material shares |
 | 2026-09-18 | Munro REJECTED — the videos do not weigh parts, the written benchmark is 2020 and paid |
 | 2026-09-18 | Free and current sources only: GREET first, then JRC, IEA, steel-supplier datasheets and OEM statements |
