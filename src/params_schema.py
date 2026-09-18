@@ -335,8 +335,14 @@ class RunParams:
         'PMElectricMotors':                'zenodo',
         'EESMElectricMotors':              'zenodo',
         'IMandPMElectricMotors':           'zenodo',
-        'axialFluxPMElectricMotors':       'report',
-        'dualRotorRadialPMElectricMotors': 'report',
+        # Both now have published masses from their makers, so they are no
+        # longer 'report' guesses -- see MACHINES in src/composition.py.
+        # ⚠️ 'spec' IS NOT 'zenodo'. A data sheet gives a whole-machine mass
+        # and no composition at all, so these two have a mass and no bill of
+        # material. Anything that needs a material split has to say so and
+        # stop, rather than borrow the radial one.
+        'axialFluxPMElectricMotors':       'spec',
+        'dualRotorRadialPMElectricMotors': 'spec',
     })
 
     # THE VEHICLE SEGMENTS, as `productKeyLevel3` spells them. A-F are the
@@ -705,10 +711,11 @@ class Params:
         if not self.run.motors:
             issues.append('run.motors is empty -- there is nothing to describe')
         for name, tier in self.run.motors.items():
-            if tier not in ('zenodo', 'report'):
+            if tier not in ('zenodo', 'spec', 'report'):
                 issues.append(f"run.motors[{name!r}] is {tier!r}; it has to be "
-                              f"'zenodo' or 'report', which is what says how far "
-                              f"a number may be trusted")
+                              f"'zenodo' (measured, in the house schema), "
+                              f"'spec' (a manufacturer data sheet: whole-machine "
+                              f"mass, NO composition) or 'report'")
 
         if tuple(self.run.layer_names) != ('product', 'component', 'material', 'element'):
             issues.append('run.layer_names is the house schema\'s own nesting and '

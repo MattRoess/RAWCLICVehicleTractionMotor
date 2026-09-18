@@ -1387,26 +1387,70 @@ def figure_critical(frame: pd.DataFrame, params, out_path: str) -> str:
     return out_path
 
 
+def _regression_band(block: pd.DataFrame, params, span, draws: int = 5000):
+    """
+    A regression and its uncertainty band, from DRAWS rather than from formulae.
+
+    ⚠️ THE BAND IS NOT A TEXTBOOK CONFIDENCE INTERVAL. Each segment's mass is
+    itself uncertain -- the consolidated dataset gives p025 and p975 for every
+    row -- so the line is refitted on every draw and the band is the
+    percentiles OF THE FITTED LINES. Fitting once to the means and putting a
+    formula's interval around it would describe scatter between segments and
+    ignore the uncertainty the source actually states.
+
+    Component masses within one motor are drawn with the same shared shock at
+    `monte_carlo.within_motor_correlation`, for the reason given there: they
+    are regressions on the same vehicle's torque and move together.
+
+    `draws` is lower than `monte_carlo.draws` because a regression is refitted
+    on every one of them. 5000 puts the Monte Carlo noise on the band edges
+    well below the band's own width.
+    """
+    rng = np.random.default_rng(params.monte_carlo.seed)
+    rho = params.monte_carlo.within_motor_correlation
+
+    torques = np.sort(block.torque.unique())
+    totals = np.zeros((draws, len(torques)))
+    shock = rng.standard_normal(draws)          # shared across the whole motor
+
+    for index, torque in enumerate(torques):
+        rows = block[block.torque == torque]
+        for _, row in rows.iterrows():
+            if pd.isna(row.p025) or pd.isna(row.p975) or row.p975 == row.p025:
+                totals[:, index] += float(row.meanValue)
+                continue
+            values, _ = _draw(row.meanValue, row.p025, row.p975, draws, rng,
+                              correlated_with=shock, correlation=rho)
+            totals[:, index] += values
+
+    # One least squares solve for every draw at once.
+    design = np.column_stack([np.ones_like(torques), torques])
+    projection = design @ np.linalg.inv(design.T @ design)
+    beta = totals @ projection                                  # (draws, 2)
+    lines = beta[:, 0:1] + beta[:, 1:2] * span[None, :]         # (draws, span)
+
+    return (np.median(lines, axis=0),
+            np.percentile(lines, 2.5, axis=0),
+            np.percentile(lines, 97.5, axis=0),
+            torques, totals.mean(axis=0))
+
+
 def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
     """
-    Every machine with a published mass, against shaft torque.
+    Every machine with a published mass, against shaft torque, with bands.
 
     ONE AXIS, AND IT IS SHAFT TORQUE. Whether a reduction follows is a
-    property of the machine, not a reason for a second figure -- Matthias
-    2026-09-18, after an earlier version kept YASA and excluded Donut Lab on a
-    gearbox argument that applied to both.
+    property of the machine, not a reason for a second figure.
 
-    ⚠️ g/Nm IS NOT A FAIR FIGURE OF MERIT and is deliberately not plotted.
-    Across these machines it runs from 93 g/Nm at 450 Nm to 9 g/Nm at
-    4300 Nm, which is mostly geometry: torque grows with rotor radius squared
-    while mass grows closer to linearly, so any high-torque machine wins it
-    without being better. Machines are compared AT A TORQUE, or not at all.
+    ⚠️ LINEAR AXES, DELIBERATELY. An earlier version used a log torque axis,
+    and a straight line on a log axis LOOKS LIKE A CURVE -- which made the
+    linear regressions appear to be fitted curves. Two linear panels instead:
+    the left one over the range the consolidated data actually covers, the
+    right one wide enough to hold the high-torque machines.
 
-    ⚠️ THE RADIAL LINES STOP WHERE THEIR DATA STOPS. The consolidated sample
-    reaches about 870 Nm. A machine built for 1500 or 4300 Nm is not the same
-    machine scaled up -- it has a different diameter and a different duty --
-    so the regression is drawn only over the range it was fitted on, and the
-    high-torque machines are left standing on their own.
+    ⚠️ THE MANUFACTURER POINTS HAVE NO BAND because they have no stated
+    uncertainty. A data sheet gives one number. Drawing an interval around it
+    would be inventing one.
     """
     import matplotlib.pyplot as plt
 
@@ -1415,66 +1459,68 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
                    (current.parameterCode == params.data.material_of_component) &
                    (current.componentKeyLevel2 != 'gearBox')]
 
-    figure, axis = plt.subplots(figsize=(12.5, 6.8))
+    figure, axes = plt.subplots(1, 2, figsize=(15, 6.2))
     colours = {'PMElectricMotors': '#8E44AD', 'EESMElectricMotors': '#2980B9',
                'IMandPMElectricMotors': '#16A085'}
+    styles = {'axialFluxPM': ('*', '#C0392B', 'Axialfluss'),
+              'axialFluxPM in-wheel': ('P', '#E67E22', 'Axialfluss, Radnabe'),
+              'dualRotorRadialPM': ('^', '#D35400', 'Doppelrotor radial')}
     limit = 0.0
 
-    for motor in params.run.motors:
-        block = base[base.componentKeyLevel1 == motor].dropna(
-            subset=['meanValue', 'torque_min']).copy()
-        if block.empty:
-            continue
-        block['torque'] = (block.torque_min + block.torque_max) / 2.0
-        totals = block.groupby('torque')['meanValue'].sum()
-        torques = np.asarray(totals.index, dtype=float)
-        slope, intercept = np.polyfit(torques, totals.values, 1)
-        limit = max(limit, torques.max())
-        span = np.linspace(torques.min() * 0.85, torques.max(), 40)
-        colour = colours.get(motor, '#7F8C8D')
-        axis.plot(span, intercept + slope * span, lw=2.4, color=colour,
-                  label=f'{MOTOR_LABEL.get(motor, motor)}, radial  '
-                        f'({intercept + slope * 450:.0f} kg bei 450 Nm)')
-        axis.plot(torques, totals.values, 'o', ms=6, mfc='white', mec=colour,
-                  mew=1.5, ls='none')
+    for axis_index, axis in enumerate(axes):
+        for motor in params.run.motors:
+            block = base[base.componentKeyLevel1 == motor].dropna(
+                subset=['meanValue', 'torque_min']).copy()
+            if block.empty:
+                continue
+            block['torque'] = (block.torque_min + block.torque_max) / 2.0
+            low_t, high_t = block.torque.min(), block.torque.max()
+            limit = max(limit, high_t)
+            span = np.linspace(low_t * 0.9, high_t, 40)
+            median, low, high, torques, means = _regression_band(
+                block, params, span)
+            colour = colours.get(motor, '#7F8C8D')
+            axis.fill_between(span, low, high, color=colour, alpha=0.17, lw=0)
+            axis.plot(span, median, lw=2.4, color=colour,
+                      label=(f'{MOTOR_LABEL.get(motor, motor)}, radial'
+                             if axis_index == 0 else None))
+            axis.plot(torques, means, 'o', ms=5.5, mfc='white', mec=colour,
+                      mew=1.4, ls='none')
 
-    styles = {'axialFluxPM': ('*', '#C0392B'),
-              'axialFluxPM in-wheel': ('P', '#E67E22'),
-              'dualRotorRadialPM': ('^', '#D35400')}
-    for topology, group in machines().groupby('topology'):
-        marker, colour = styles.get(topology, ('s', '#555555'))
-        axis.plot(group.torque_shaft, group.mass_kg, marker, ms=13,
-                  color=colour, mec='white', mew=1.1, ls='none', zorder=8,
-                  label=f'{topology}, Herstellerangabe')
-        for _, row in group.iterrows():
-            # P400 R and P400 C sit at the same torque; stagger them.
-            drop = -26 if row['name'].endswith('P400 R') else -11
-            axis.annotate(f'{row["name"].replace("Equipmake ", "").replace("DeepDrive ", "").replace("Donut Lab ", "")}  '
-                          f'{row.mass_kg:.0f} kg',
-                          xy=(row.torque_shaft, row.mass_kg),
-                          xytext=(8, drop), textcoords='offset points',
-                          fontsize=7.8, color=colour)
+        for topology, group in machines().groupby('topology'):
+            marker, colour, label = styles.get(topology, ('s', '#555', topology))
+            axis.plot(group.torque_shaft, group.mass_kg, marker, ms=13,
+                      color=colour, mec='white', mew=1.1, ls='none', zorder=8,
+                      label=f'{label}, Herstellerangabe' if axis_index == 1
+                      else None)
+            for _, row in group.iterrows():
+                drop = -25 if str(row['name']).endswith('P400 R') else -11
+                axis.annotate(
+                    f'{str(row["name"]).replace("Equipmake ", "").replace("DeepDrive ", "").replace("Donut Lab ", "")}  '
+                    f'{row.mass_kg:.0f} kg',
+                    xy=(row.torque_shaft, row.mass_kg), xytext=(8, drop),
+                    textcoords='offset points', fontsize=7.8, color=colour)
 
-    axis.axvspan(limit, 5000, color='#000000', alpha=0.045, lw=0)
-    axis.annotate('jenseits der Datenbasis\nder radialen Regression',
-                  xy=(limit * 1.35, 12), fontsize=8.5, color='#666666',
-                  style='italic')
+        axis.set_xlabel('Drehmoment an der Motorwelle [Nm]')
+        axis.set_ylabel('Motormasse ohne Getriebe [kg]')
+        axis.set_ylim(0, None)
+        axis.grid(alpha=0.22, lw=0.6)
+        axis.legend(fontsize=8.5, framealpha=0.95, loc='upper left')
 
-    axis.set_xscale('log')
-    axis.set_xlim(300, 5200)
-    axis.set_ylim(0, None)
-    axis.set_xticks([400, 600, 900, 1500, 2400, 4300])
-    axis.set_xticks([], minor=True)
-    axis.get_xaxis().set_major_formatter(plt.FuncFormatter(lambda v, _: f'{v:.0f}'))
-    axis.set_xlabel('Drehmoment an der Motorwelle [Nm], log')
-    axis.set_ylabel('Motormasse ohne Getriebe [kg]')
-    axis.grid(alpha=0.22, lw=0.6, which='both')
-    axis.legend(fontsize=8.5, framealpha=0.95, loc='upper left')
-    axis.set_title('Alle Maschinen mit veröffentlichter Masse, '
-                   'gegen Wellendrehmoment\n'
-                   'Getriebe überall ausgeschlossen \u2014 g/Nm ist bewusst '
-                   'nicht aufgetragen: hohes Drehmoment gewinnt es von selbst',
-                   fontsize=12)
+    axes[0].set_xlim(0, limit * 1.05)
+    axes[0].set_title(f'Bereich der Datenbasis, bis {limit:.0f} Nm',
+                      fontsize=11.5)
+    axes[1].set_xlim(0, 4600)
+    axes[1].axvspan(limit, 4600, color='#000000', alpha=0.05, lw=0)
+    axes[1].set_title('Gesamtbild \u2014 grau: jenseits der Datenbasis',
+                      fontsize=11.5)
+
+    figure.suptitle(
+        'Alle Maschinen mit veröffentlichter Masse, gegen Wellendrehmoment.  '
+        'Getriebe überall ausgeschlossen.\n'
+        'Bänder: 95% aus Monte-Carlo-Ziehungen, Regression je Ziehung neu '
+        'gefittet.  Herstellerpunkte haben keine angegebene Unsicherheit.',
+        fontsize=11.5)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
