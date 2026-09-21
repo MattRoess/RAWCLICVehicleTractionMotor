@@ -1,56 +1,110 @@
 # RAWCLICVehicleTractionMotor
 
 What electric traction motors are made of, consolidated from the underlying
-sources.
+sources: give it a motor type, a torque, a voltage class and a year, get
+kilograms per vehicle by material.
 
 It is the traction-motor counterpart to `RAWCLICVehicleBattery` (batteries),
 `RAWCLICVehicleComposition` (whole car) and `RAWCLICVehicleElectronics` (BEV
 electronics), and it feeds
 `RAWCLICStockAndFlow/code/04_03_tractionmotors.py`.
 
-**The composition workbook is not here yet.** The environment is ready and the
-smoke test runs; there is simply nothing to read until the file arrives.
-`RAWCLICStockAndFlow` expects it as
-`20260309-Traction_motors_consolidated.xlsx`
-(`params.materials.traction_composition_file_name`).
+**Start with `documentation/HANDOVER.md`** -- what this stands on, what was
+corrected and why, and what is still open. `documentation/METHODOLOGY.md` is
+the long form.
 
 ---
 
 ## Running it
 
+Two stages, in order. No arguments, and not by oversight: **every setting is in
+`src/params_schema.py`**, so a switch that only exists on a command line is a
+switch the person running this never sees.
+
 ```bash
-./.venv/bin/python 00_check_environment.py
+./.venv/bin/python 00_parameters.py
+./.venv/bin/python 01_composition.py
 ```
 
-That is the smoke test: it checks the interpreter and the pinned packages, and
-profiles any `.xlsx` it finds in the project root -- sheets, shape, columns and
-the distinct values of every low-cardinality column. It writes nothing.
+`00_parameters.py` validates the settings and regenerates `params.xlsx` and
+`documentation/PARAMETER_REFERENCE.md` from them. Both are OUTPUTS -- editing
+either changes nothing, because nothing reads them.
 
-It deliberately has **no hardcoded expected schema**. Nobody here has seen the
-traction workbook, so checking it against an invented list of columns would only
-be checking it against a guess. It reports what is actually in the file instead.
-Tighten it into a real schema check once the workbook has arrived and been
-looked at.
+`01_composition.py` is the one stage: read the sources, audit them, verify the
+stator reading, correct what is established, audit again, write the dataset and
+the figures. Auditing and correcting are one argument, not two tasks.
 
-For reference, `04_03_tractionmotors.py` reads the workbook expecting
-`materialKeyLevel3`, `materialKeyLevel4`, `parameterCode` and `value`, filtered
-to `params.materials.composition_parameter_code`. That is what the consumer
-wants, not a verified description of the file.
+### What it writes, into `data/`
+
+| file | |
+|---|---|
+| `TractionMotor_composition_by_torque.csv` | **the deliverable.** 14 508 rows, no segment dimension |
+| `TractionMotor_for_stockandflow.xlsx` / `.csv` | the same in the house schema, for the stock-and-flow model |
+| `TractionMotor_composition_trajectory.csv` | by segment, 13 338 rows |
+| `TractionMotor_composition.xlsx` | current composition, 8 sheets, house schema |
+| `composition_audit.csv` | every finding, before and after correction |
+
+Plus seven figures in `figures/`.
+
+⚠️ **The handover to the stock-and-flow model is not wired up yet.**
+`04_03_tractionmotors.py` reads
+`params.materials.traction_composition_file_name`, still
+`20260309-Traction_motors_consolidated.xlsx`, and no traction file has been
+placed in that project's `data/raw/`. The export exists here; the filename and
+the copy are open.
+
+### The sources
+
+Declared in `data.sources` in `src/params_schema.py` -- **adding a source is a
+declaration, not a code change** -- and the files themselves live under
+`documentation/TractionMotor/`. `role` is a gate enforced in code: `load()`
+refuses a verification source. The base is the Zenodo consolidated dataset;
+what each source may do, and which two of them are not independent, is
+`HANDOVER.md` §2.
+
+### The smoke test
+
+```bash
+./.venv/bin/python 99_check_environment.py
+```
+
+It checks the interpreter and the pinned packages, and profiles any `.xlsx` it
+finds in the project root -- sheets, shape, columns and the distinct values of
+every low-cardinality column. It writes nothing. Today the only workbook in the
+root is `params.xlsx`, so that is what it profiles.
 
 ### In Positron
 
 Open this folder as the workspace. `.vscode/settings.json` already points the
 interpreter at `.venv`, activates it in every terminal, and runs scripts from
-the project root, so relative paths to the workbook resolve the same way whether
+the project root, so relative paths to the sources resolve the same way whether
 the code runs from the console, a script or a notebook cell.
 
-### Rebuilding the environment from scratch
+---
+
+## The environment
+
+Python 3.14.4, matching `RAWCLICStockAndFlow` and `RAWCLICVehicleBattery`.
+Versions are pinned in `requirements.txt`; `ipykernel` is there because Positron
+needs it to start a Python console.
 
 ```bash
 ~/.pyenv/versions/3.14.4/bin/python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 ```
 
-Python 3.14.4, matching `RAWCLICStockAndFlow` and `RAWCLICVehicleBattery`.
-Versions are pinned in `requirements.txt`; `ipykernel` is there because Positron
-needs it to start a Python console.
+⚠️ **The project lives in iCloud Drive and `.venv` does not survive it.**
+Working across two Macs left 222 empty directories under `site-packages` on
+2026-09-21 -- `numpy/_utils/` among them, which fails as
+`cannot import name 'set_module' from 'numpy._utils' (unknown location)` rather
+than as a missing package. It is not repairable in place: delete `.venv` and run
+the two lines above. Rebuilding takes about a minute, and no data or code is in
+there.
+
+## Data is not in the repository
+
+Same rule as the sibling projects: `.gitignore` excludes every `.xlsx`, `.csv`,
+`.pkl`, `.npy` and `.png`. A fresh clone gets the CODE ONLY and cannot run
+until the source documents are supplied separately -- iCloud, shared drive,
+however they are distributed -- and the deliverable is handed to the
+stock-and-flow model directly, not through GitHub.
