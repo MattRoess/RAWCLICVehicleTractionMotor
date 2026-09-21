@@ -257,6 +257,53 @@ class DataParams:
     material_of_component: str = 'm-c'
     element_of_material: str = 'e-m'
 
+    # ⚠️ THE TEMPERATURE A MAGNET LOSES ITS MAGNETISATION AT, BY GRADE CLASS.
+    #
+    # Matthias 2026-09-21: "Dy and Tb are essential for the inversion
+    # temperature", and it is not in the element workbook. It is declared here
+    # rather than only written into `data/raw/10_MaterialElementDefinitions.xlsx`
+    # because that workbook is data and data is not in the repository -- a
+    # mapping that exists only inside an untracked binary is a mapping that gets
+    # lost. The same four columns are in the copy for anyone reading the file.
+    #
+    # TWO DIFFERENT TEMPERATURES, and only the first one a motor ever meets:
+    #   maximum WORKING temperature   irreversible loss starts above it. The
+    #                                 grade class. 80 C plain, 230 C for AH.
+    #   Curie temperature ~320 C      ferromagnetism goes entirely. The same
+    #                                 for every grade here, and 100 C beyond
+    #                                 anything a traction motor sees.
+    #
+    # ⚠️ THE WORKING FIGURE IS A CLASS RATING, NOT A PROPERTY OF THE ALLOY. It
+    # depends on the permeance coefficient of the actual magnet in its actual
+    # magnetic circuit -- geometry and load line, not chemistry. Two magnets of
+    # one grade in different rotors have different real limits. Treat it as the
+    # label it is.
+    #
+    # WHY IT BELONGS IN A MATERIALS MODEL AT ALL. The suffix is a minimum
+    # intrinsic coercivity class, and coercivity is bought with dysprosium and
+    # terbium -- they raise the anisotropy field. So in the workbook Dy climbs
+    # 0 -> 0.11 and Tb 0 -> 0.010 straight up this table, while Nd stays
+    # 0.29-0.32 in every single row. The grade does not change the neodymium.
+    # It changes the heavy rare earths, and those are the two elements China
+    # placed under export licence in April 2025, which is why the operating
+    # temperature a motor demands is a supply-chain quantity and not only an
+    # engineering one.
+    #
+    # Sources: class ratings, radialmagnet.com/neodymium-magnet-temperature-
+    # classes; Curie ~320 C, stanfordmagnets.com. Neither is in any source in
+    # `sources` -- the received reports state the MECHANISM ("Dy and Tb can
+    # improve high-temperature resistance to demagnetization") and no degrees.
+    # SAFE TO CHANGE: yes, and a measured limit for a real rotor beats a class
+    # rating every time.
+    magnet_grade_temperature: dict[str, int] = field(default_factory=lambda: {
+        'N': 80, 'M': 100, 'H': 120, 'SH': 150, 'UH': 180, 'EH': 200,
+        'AH': 230,
+    })
+
+    # SAFE TO CHANGE: yes. Nominal for NdFeB; cobalt raises it, which is why
+    # `Co` climbs with the grade class in the workbook alongside Dy.
+    magnet_curie_temperature: int = 320
+
     # ---- convenience, so no stage reaches into the registry by hand ----
 
     @property
