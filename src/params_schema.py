@@ -748,6 +748,92 @@ class RunParams:
     # comparison simply is not written.
     magnet_grade_scenarios: tuple[str, ...] = ('SH', 'UH', 'EH')
 
+    # ⚠️ DOES A VEHICLE USING THIS MACHINE CARRY A REDUCTION GEAR?
+    #
+    # THE BUG THIS FIXES. The three radial types are per VEHICLE and include a
+    # gearBox component -- 32 kg of the PMSM's 98 kg at 400 Nm. The two spec
+    # machines were their data sheet mass and nothing else, so at the same
+    # torque axial flux read 29 kg against the PMSM's 98. A consumer would have
+    # taken that for a two-thirds material saving from changing topology. It is
+    # two scopes in one column, and it was in the deliverable from the first
+    # run.
+    #
+    # WHAT THE MACHINE TABLE ALREADY KNEW, and `machines()` says so per row:
+    #   YASA P400 C           gearbox 'none in the data sheet' -- EXCLUDED from
+    #                         the 28.2 kg, which is not the same as not needed
+    #   Equipmake APM-200     9.0 kg, integrated 5.5:1 epicyclic
+    #   DeepDrive RM 1500     'little or none, high torque low speed'
+    #   Donut Lab 21"         0.0 kg, 'none, direct drive in the wheel' -- the
+    #                         only confirmed zero in the table, and not an
+    #                         anchor for anything modelled
+    #
+    # SET BY MATTHIAS 2026-09-21: axial flux no gearbox, dual rotor radial with
+    # one.
+    #
+    # ⚠️ AND THE PUBLISHED EVIDENCE POINTS THE OTHER WAY ON BOTH, which is
+    # recorded here rather than argued:
+    #   axial flux    YASA sells a "P400 Series with Lightweight Gearbox", and
+    #                 the Xtrac P1227 ILEV is 95 kg for a gearbox plus TWO P400
+    #                 motors (48 kg of motor), giving 3900 Nm at the wheels. A
+    #                 370 Nm machine at 8000 rpm cannot drive a wheel directly.
+    #   dual rotor    DeepDrive's geared products are the CSD 450 (6.4:1 to
+    #                 9:1), CSD 700 (6:1 to 8:1) and CD 450 (planetary, co-axial
+    #                 output) -- but those quote 430 Nm AT THE MOTOR, while this
+    #                 project's anchor is RM 1500 at 1500 Nm, which is the
+    #                 gearless in-wheel family. Gearing the RM anchor gears the
+    #                 wrong machine.
+    #
+    # So the honest reading of the anchors is the reverse of the setting, and
+    # the setting stands because the choice of which product reaches the 2035
+    # fleet is Matthias's and not the literature's. If the intent is
+    # DeepDrive's central drive, the ANCHOR has to change too -- to a CD 450
+    # class unit -- not just this flag.
+    # SAFE TO CHANGE: yes, and it moves the spec machines by tens of kilograms.
+    spec_gearbox: dict[str, bool] = field(default_factory=lambda: {
+        'axialFluxPMElectricMotors': False,
+        'dualRotorRadialPMElectricMotors': True,
+    })
+
+    # ⚠️ AND THE MOTOR COUNT IS DELIBERATELY NOT A MULTIPLIER. Read this before
+    # adding one.
+    #
+    # Matthias 2026-09-21: axial flux is ideal per wheel, in E and F segments,
+    # so two to four motors. True, and it does NOT multiply the material.
+    #
+    # THE FLEET SAYS SO, and it is this project's own finding: a two-motor car
+    # carries LESS magnet than the single-motor category -- 1.07, 0.86 and 0.89
+    # of one machine across the three configurations that could be compared --
+    # because the second machine is added for power and torque, and one of them
+    # is usually induction. HANDOVER §4: "a shift to all-wheel drive does not
+    # multiply magnet demand". Material follows VEHICLE TORQUE, which is the
+    # whole reason this project reports on a torque grid and threw the segment
+    # away.
+    #
+    # Four axial machines of 150 Nm in an E-segment car make the same 603 Nm as
+    # one machine of 603 Nm and need about the same active material. The iron
+    # and copper are sized by the torque and the flux, not by how many housings
+    # it is divided into.
+    #
+    # ⚠️ THE MODEL'S OWN CURVE DISAGREES, AND IT IS WRONG TO BELIEVE IT.
+    # Evaluated naively, 4 x m(400/4) is 2.3 times m(400) for the magnet -- 4.86
+    # kg against 2.07 -- because each machine pays the INTERCEPT of the borrowed
+    # radial shape, and that intercept carries a whole vehicle's housing and
+    # gearbox. That is an artefact of borrowing a per-vehicle shape for a
+    # per-machine curve, not a finding about motors. Evaluate ONCE at the
+    # vehicle's torque.
+    #
+    # WHERE THE COUNT DOES BELONG: the number of machines per vehicle is a UNIT
+    # count, and it matters to whoever has to collect, transport and disassemble
+    # them -- four in-wheel motors is four housings, four sets of bearings and
+    # four disassembly operations for the same kilograms of neodymium. That is
+    # the recovery model's question and the stock-and-flow model's, not this
+    # one's. Nothing here should multiply by it.
+    #
+    # E and F sit at 603 Nm and 880 Nm in the fleet, both inside the 100-1200 Nm
+    # grid, so no extra range is needed for them either. SAFE TO CHANGE: there
+    # is nothing to change -- this is a note against a change that looks
+    # obvious and is not.
+
     # ⚠️ HOW UNCERTAIN A MACHINE BUILT FROM ONE DATA SHEET IS.
     #
     # A spec machine has no interval anywhere: a data sheet states one mass

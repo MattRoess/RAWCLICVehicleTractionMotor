@@ -2216,6 +2216,24 @@ def _spec_by_torque(radial: pd.DataFrame, params: Params,
         # uncertainty at that torque, which already grows away from the radial
         # data. The derived SHARES carry `spec_share_uncertainty`. Neither is
         # measured, and both are declared.
+        # ⚠️ THE GEARBOX, WHERE THE VEHICLE HAS ONE. The data sheet is a bare
+        # machine and the radial types are per vehicle WITH a gearBox
+        # component, so without this the two are not on one scale and a
+        # consumer reads the difference as a topology saving. Taken from the
+        # radial PMSM's own gearBox draws at the same torque, per draw, so it
+        # carries the same uncertainty as everything else and scales with
+        # torque instead of being one number. `run.spec_gearbox` decides, and
+        # `machines()` records what each data sheet does and does not include.
+        gearbox_draws = None
+        if params.run.spec_gearbox.get(motor, False) and draws_out is not None:
+            parts = [array for (this, component, _sub, material), array
+                     in draws_out.items()
+                     if this == 'PMElectricMotors' and component == 'gearBox']
+            if parts:
+                gearbox_draws = np.zeros_like(parts[0], dtype=np.float64)
+                for array in parts:
+                    gearbox_draws += array
+
         total_draws = _radial_total_draws(draws_out, grid, slope)
         if total_draws is not None:
             # DRAWN. The shape is this draw's own radial total, scaled through
@@ -2274,6 +2292,11 @@ def _spec_by_torque(radial: pd.DataFrame, params: Params,
             klass_draws = None
             if totals_draws is not None and share_draws is not None:
                 klass_draws = totals_draws * share_draws[klass][:, None]
+                # A gearbox is steel, and it is ADDITIONAL to the machine: the
+                # shares split the data sheet's mass and must keep summing to
+                # it, so the gearbox cannot be taken out of them.
+                if gearbox_draws is not None and klass == 'steel':
+                    klass_draws = klass_draws + gearbox_draws
                 if draws_out is not None:
                     draws_out[(motor, None, None, klass)] = np.asarray(
                         klass_draws, dtype=np.float32)
