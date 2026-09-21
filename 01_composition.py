@@ -49,7 +49,8 @@ import pandas as pd                                        # noqa: E402
 
 from src.composition import (CITATION, apply_corrections,   # noqa: E402
                              composition_by_torque, export_stock_and_flow,
-                             write_draws,
+                             element_layer, magnet_element_check,
+                             write_draws, write_element_draws,
                              figure_all_types,
                              figure_by_torque,
                              verify_by_torque,
@@ -267,6 +268,37 @@ def main() -> int:
         log.to_excel(writer, sheet_name='corrections', index=False)
         declared().to_excel(writer, sheet_name='corrections_declared', index=False)
         bench.to_excel(writer, sheet_name='benchmark_drexler2025', index=False)
+    # THE ELEMENT LAYER. HANDOVER §7.2: no e-m rows anywhere, so Nd, Pr, Dy
+    # and Tb could not be reported. They can now, for the magnet.
+    _rule('Elements of the magnet')
+    em_rows, element_mass, fractions = element_layer(grid, draws_out, params)
+    if not em_rows.empty:
+        for motor, (names, drawn) in sorted(fractions.items()):
+            klass = params.run.magnet_grade[motor]
+            shares = {name: drawn[:, position].mean()
+                      for position, name in enumerate(names)}
+            print(f'  {motor:32} {klass:2} grade, '
+                  f'{params.data.magnet_grade_temperature[klass]} C   '
+                  f'Nd {shares["Nd"]:.3f}  Pr {shares["Pr"]:.4f}  '
+                  f'Dy {shares["Dy"]:.4f}  Tb {shares["Tb"]:.4f}')
+        checks = pd.DataFrame([magnet_element_check(params, motor, names, drawn)
+                               for motor, (names, drawn) in sorted(fractions.items())])
+        print(f'  iron is the balance: inside the stated band in '
+              f'{100 * checks.inside_stated.mean():.1f}% of draws, and inside '
+              f'it less cobalt in {100 * checks.inside_stated_less_cobalt.mean():.1f}% '
+              f'-- the stated iron includes the cobalt')
+        em_rows.to_csv(os.path.join(params.output.data_dir,
+                                    'TractionMotor_magnet_elements.csv'),
+                       index=False)
+        element_mass.to_csv(os.path.join(params.output.data_dir,
+                                         'TractionMotor_element_mass_by_torque.csv'),
+                            index=False)
+        checks.to_csv(os.path.join(params.output.data_dir,
+                                   'TractionMotor_element_checks.csv'), index=False)
+        written = write_element_draws(fractions, params.output.draws_dir)
+        print(f'  {len(em_rows)} e-m rows, {len(element_mass):,} element-mass rows, '
+              f'{len(written)} chemistry draw arrays')
+
     # THE DISTRIBUTION ITSELF, not a summary of it.
     manifest = write_draws(draws_out, params, params.output.draws_dir)
     if not manifest.empty:

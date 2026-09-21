@@ -241,9 +241,25 @@ almost its whole range is extrapolation below the one machine that exists.
 ## 7. Open
 
 1. **`zero-interval` is still blocking** — C3's mass is marked, not fixed.
-2. **No element layer.** No `e-m` rows anywhere; materials stop at
-   `alloySteel`, `highCuAlloys2`, `rareEarthMetalsAndAlloys`. **Nd, Pr, Dy and
-   Tb cannot be reported.** §2.1 routes this to supplier datasheets.
+2. ~~**No element layer.**~~ **CLOSED FOR THE MAGNET, 2026-09-21.** Matthias's
+   `10_MaterialElementDefinitions.xlsx` supplies 28 sintered NdFeB grades as
+   min/max per element, and the magnet now carries `e-m` rows for Nd, Fe, B, Dy,
+   Tb, Pr, Co, Al, Cu, Nb and Ga, drawn per draw and multiplied into the magnet
+   mass draws. The grade class comes from `run.magnet_grade` — SH radial, H
+   axial flux, on the oil-cooling argument of §4.3.
+
+   **Still open for the other four materials.** The same workbook has
+   `ElectricalSteel`, `Copper`, `CastAl` and `CastFeSteel`, so lamination,
+   copper, aluminium and steel can have an element layer the same way. Only the
+   magnet was asked for.
+
+   ⚠️ **And praseodymium is unresolved.** The workbook gives Pr 0–0.01 of magnet
+   mass, which is an impurity specification. The received reports give Pr
+   0.03–0.15 kg in a 150 kW motor whose magnet is 1.5 kg — 2 to 10 % — because
+   commercial NdFeB is made from NdPr didymium, where Pr is a fifth to a quarter
+   of the rare earth and not a trace. The model currently reports the workbook's
+   0.5 %, so **Pr is understated by roughly an order of magnitude** if the
+   didymium reading is right. Nd, Dy and Tb are unaffected.
 3. **Rotor `c-p` blank in all 26 rows**; derivable by summing, but that is a
    decision. **Cooling mass blank in all 26** and not derivable from anything.
 4. **Topology differences may be understated.** At 500 Nm the data puts the IM

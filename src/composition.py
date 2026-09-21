@@ -2327,6 +2327,288 @@ def _spec_by_torque(radial: pd.DataFrame, params: Params,
     return pd.DataFrame(rows)
 
 
+MAGNET_ELEMENTS = ('Nd', 'Fe', 'B', 'Dy', 'Tb', 'Pr', 'Co', 'Al', 'Cu',
+                   'Nb', 'Ga')
+
+# The element that takes up whatever the others leave. Every other sheet in the
+# workbook spells this out -- ElectricalSteel, CastAl and CastFeSteel all say
+# "balance" for their base metal -- and the magnet sheet is the only one that
+# states a range for it instead.
+MAGNET_BALANCE = 'Fe'
+
+
+def magnet_chemistry(params: Params) -> pd.DataFrame:
+    """
+    The NdFeB element bounds per grade class, from the element workbook.
+
+    One row per (TempClass, element) with `low` and `high`: the lowest minimum
+    and the highest maximum across the grades of that class, so the band covers
+    the class rather than one grade inside it.
+    """
+    frame = pd.read_excel(params.data.composition_file,
+                          sheet_name=params.data.composition_sheet)
+
+    rows = []
+    for klass, block in frame.groupby('TempClass'):
+        low = block[block.Range == 'min']
+        high = block[block.Range == 'max']
+        for element in MAGNET_ELEMENTS:
+            rows.append({
+                'TempClass': klass,
+                'element': element,
+                'low': float(low[element].min()),
+                'high': float(high[element].max()),
+                'grades': int(len(low)),
+                'TmaxOperating_C': int(block.TmaxOperating_C.iloc[0]),
+            })
+    return pd.DataFrame(rows)
+
+
+def magnet_element_draws(params: Params, motor: str,
+                         draws: int) -> tuple[list[str], np.ndarray]:
+    """
+    The magnet's element fractions, drawn, for one motor type's grade class.
+
+    Returns the element names and `(draws, n_elements)` fractions summing to
+    exactly 1 in every draw.
+
+    ⚠️ UNIFORM BETWEEN THE BOUNDS, NOT NORMAL. `monte_carlo.interval_shape`
+    describes a regression's confidence interval, where the middle is the
+    estimate and the ends are unlikely. These bounds are a SPECIFICATION range:
+    a grade permits anything between them and says nothing about where inside
+    a given batch falls. A uniform draw is what that sentence means.
+
+    ⚠️ AND THE BOUNDS DO NOT FORM A COMPOSITION. They are independent marginal
+    limits -- for the SH class the minima sum to 0.98 and the maxima to 1.16 --
+    because no real magnet sits at every element's maximum at once. Something
+    has to give, and what gives is IRON: every other sheet in this workbook
+    writes "balance" for its base metal, so the non-iron elements are drawn as
+    stated and iron takes 1 minus their sum.
+
+    That choice is deliberate and it is the conservative one for this project.
+    It keeps Nd, Pr, Dy and Tb -- the four this model exists to report, and the
+    two under export licence -- at exactly the fractions the source states,
+    and puts the inconsistency in the element nobody is tracking for supply
+    risk. Renormalising all eleven instead would have pulled Nd below the
+    0.29 the Critical Review confirms, to pay for slack in the trace elements.
+    The iron that results is checked against its own stated band and reported.
+    """
+    klass = params.run.magnet_grade.get(motor, '')
+    if not klass:
+        raise ValueError(f'{motor} has no magnet grade class in run.magnet_grade')
+
+    chemistry = magnet_chemistry(params)
+    band = chemistry[chemistry.TempClass == klass].set_index('element')
+    if band.empty:
+        raise ValueError(f'no {klass} grades in the element workbook')
+
+    others = [element for element in MAGNET_ELEMENTS if element != MAGNET_BALANCE]
+    rng = np.random.default_rng(params.monte_carlo.seed + 7919)
+    drawn = np.empty((draws, len(MAGNET_ELEMENTS)), dtype=np.float64)
+    names = list(MAGNET_ELEMENTS)
+
+    for element in others:
+        low, high = band.loc[element, 'low'], band.loc[element, 'high']
+        column = names.index(element)
+        drawn[:, column] = (np.full(draws, low) if high <= low
+                            else rng.uniform(low, high, draws))
+
+    balance_column = names.index(MAGNET_BALANCE)
+    drawn[:, balance_column] = 1.0 - drawn[:, [names.index(e) for e in others]].sum(axis=1)
+    return names, drawn
+
+
+def magnet_element_check(params: Params, motor: str, names: list[str],
+                         drawn: np.ndarray) -> dict:
+    """
+    The drawn iron against its stated band, and the reason it sits below it.
+
+    ⚠️ THE WORKBOOK'S IRON BAND INCLUDES THE COBALT, and this is how we know.
+    The class bounds do not close: at their midpoints the SH elements sum to
+    1.070 and the H elements to 1.052, and cobalt alone is 0.060 and 0.040 of
+    that overshoot. Cobalt substitutes for iron in the lattice, so an iron
+    figure written before the cobalt was split out would be exactly this much
+    too high.
+
+    Tested, not assumed. Balance-derived iron lands inside the STATED band in
+    0.2% of draws for SH and 10% for H -- and inside the same band with cobalt
+    subtracted in 98.1% and 98.9%. That is not a near miss either way; the
+    second reading is simply the right one, and it means the balance this
+    function produces agrees with the source rather than contradicting it.
+
+    Reported and not corrected: the workbook is Matthias's and this project
+    does not edit a source. The finding says which reading the numbers support.
+    """
+    klass = params.run.magnet_grade.get(motor, '')
+    band = magnet_chemistry(params)
+    band = band[band.TempClass == klass].set_index('element')
+    iron = drawn[:, names.index(MAGNET_BALANCE)]
+
+    stated_low, stated_high = band.loc[MAGNET_BALANCE, ['low', 'high']]
+    # Cobalt sits inside the stated iron, so the band it should be compared
+    # against is the stated one less the cobalt that was drawn out of it.
+    adjusted_low = stated_low - band.loc['Co', 'high']
+    adjusted_high = stated_high - band.loc['Co', 'low']
+
+    return {
+        'componentKeyLevel1': motor,
+        'TempClass': klass,
+        'element': MAGNET_BALANCE,
+        'drawn_p025': float(np.percentile(iron, 2.5)),
+        'drawn_median': float(np.median(iron)),
+        'drawn_p975': float(np.percentile(iron, 97.5)),
+        'stated_low': float(stated_low),
+        'stated_high': float(stated_high),
+        'inside_stated': float(((iron >= stated_low) &
+                                (iron <= stated_high)).mean()),
+        'stated_less_cobalt_low': float(adjusted_low),
+        'stated_less_cobalt_high': float(adjusted_high),
+        'inside_stated_less_cobalt': float(((iron >= adjusted_low) &
+                                            (iron <= adjusted_high)).mean()),
+        'note': 'iron is the balance. The stated iron band appears to include '
+                'the cobalt -- the class bounds overshoot 1 by almost exactly '
+                'the cobalt -- so the comparison that holds is the one with '
+                'cobalt subtracted. Reported, not corrected: the source is not '
+                'edited.',
+    }
+
+
+def write_element_draws(fractions: dict, directory: str) -> list[str]:
+    """
+    The drawn magnet chemistry, per motor type: `(draws, n_elements)` float32.
+
+    Small -- 8.8 MB a motor -- and it is what makes the element masses exact
+    rather than approximate downstream:
+
+        element mass of draw i = magnet mass draws[i] * fraction draws[i]
+
+    Writing the element masses themselves would be eleven more copies of the
+    magnet array per motor for numbers that are one multiplication away.
+    """
+    os.makedirs(directory, exist_ok=True)
+    written = []
+    for motor, (names, drawn) in sorted(fractions.items()):
+        path = os.path.join(directory, f'{motor}__magnet_element_fractions.npy')
+        np.save(path, np.asarray(drawn, dtype=np.float32))
+        with open(os.path.join(
+                directory, f'{motor}__magnet_elements.txt'), 'w') as handle:
+            handle.write('\n'.join(names) + '\n')
+        written.append(os.path.basename(path))
+    return written
+
+
+def element_layer(grid: pd.DataFrame, draws_out: dict,
+                  params: Params) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """
+    The magnet's elements: `e-m` shares, and the kilograms inside the component.
+
+    HANDOVER §7.2 -- "No element layer. No `e-m` rows anywhere ... Nd, Pr, Dy
+    and Tb cannot be reported" -- is what this closes, for the magnet.
+
+    Returns `(em_rows, element_mass, fraction_draws)`.
+
+    `em_rows`      one row per motor type and element: the element as a share
+                   of the magnet, `parameterCode = e-m`, percentiles of the
+                   drawn chemistry. A share, so it carries no torque, year or
+                   voltage: the grade's chemistry is the same machine-sized-up.
+    `element_mass` the kilograms, per motor type, element, torque, year and
+                   voltage class -- the element INSIDE the component, which is
+                   what the recovery model reads.
+    `fraction_draws`  motor -> (names, (draws, n_elements)), persisted so the
+                   element mass of any draw is reconstructible exactly.
+
+    ⚠️ THE TWO UNCERTAINTIES ARE COMBINED PER DRAW, not multiplied as
+    intervals. Draw i's element mass is draw i's magnet mass times draw i's
+    chemistry. The magnet mass comes from the regression bootstrap and the
+    chemistry from the grade's specification band, and they are independent --
+    which is a statement the draws make correctly and percentile arithmetic
+    cannot make at all.
+
+    ⚠️ WHICH GRADE, AND THEREFORE HOW MUCH DYSPROSIUM, IS AN ASSUMPTION.
+    `run.magnet_grade` is SH for the radial machines and H for axial flux, on a
+    cooling argument, and Matthias marked it unsure. Between those two classes
+    dysprosium runs 0.04-0.07 against 0.02-0.05 and terbium 0-0.005 against
+    nothing at all. Vary it before believing any rare-earth total here.
+    """
+    from src.params_schema import years_wanted
+
+    draws = params.monte_carlo.draws
+    years = years_wanted(params.run.years)
+    magnet_key = 'magnet'
+
+    em_rows, mass_rows, fractions = [], [], {}
+    magnets = {motor: klass for motor, klass in params.run.magnet_grade.items()
+               if klass}
+
+    for motor, klass in magnets.items():
+        # Every array of this motor's magnet, whatever component holds it.
+        arrays = [array for (this, _component, _sub, material), array
+                  in draws_out.items()
+                  if this == motor and material == magnet_key]
+        if not arrays:
+            continue
+        magnet_draws = np.zeros_like(arrays[0], dtype=np.float64)
+        for array in arrays:
+            magnet_draws += array
+
+        names, drawn = magnet_element_draws(params, motor, draws)
+        fractions[motor] = (names, drawn)
+
+        component = next((component for (this, component, _s, material)
+                          in draws_out if this == motor
+                          and material == magnet_key), None)
+
+        for index, element in enumerate(names):
+            share = drawn[:, index]
+            em_rows.append({
+                'componentKeyLevel1': motor,
+                'componentKeyLevel2': component,
+                'materialClass': magnet_key,
+                'materialKeyLevel1': 'rareEarthMetalsAndAlloys',
+                'element': element,
+                'parameterCode': params.data.element_of_material,
+                'parameter': 'mass of element (kg) in the material',
+                'grade_class': klass,
+                'TmaxOperating_C': params.data.magnet_grade_temperature[klass],
+                'meanValue': float(np.median(share)),
+                'p025': float(np.percentile(share, 2.5)),
+                'p975': float(np.percentile(share, 97.5)),
+                'basis': f'{klass} grade class, drawn uniformly between the '
+                         f'class bounds of data.composition_file',
+            })
+
+            # The kilograms. Only where the element is actually present --
+            # terbium is exactly zero below SH and a row of zeros with an
+            # interval of zero is the `zero-interval` defect, not a number.
+            if float(np.max(share)) <= 0.0:
+                continue
+            element_draws = magnet_draws * share[:, None]
+            median = np.median(element_draws, axis=0)
+            low = np.percentile(element_draws, 2.5, axis=0)
+            high = np.percentile(element_draws, 97.5, axis=0)
+            torques = sorted(grid.torque_nm.unique())
+            for volts in params.scenario.copper_mass:
+                for year in years:
+                    scale = factor(year, magnet_key, params)
+                    for position, torque in enumerate(torques):
+                        mass_rows.append({
+                            'componentKeyLevel1': motor,
+                            'componentKeyLevel2': component,
+                            'materialClass': magnet_key,
+                            'element': element,
+                            'parameterCode': params.data.element_of_material,
+                            'torque_nm': torque,
+                            'productionYear': year,
+                            'voltageClass': volts,
+                            'grade_class': klass,
+                            'meanValue': max(0.0, median[position] * scale),
+                            'p025': max(0.0, low[position] * scale),
+                            'p975': max(0.0, high[position] * scale),
+                        })
+
+    return (pd.DataFrame(em_rows), pd.DataFrame(mass_rows), fractions)
+
+
 def write_draws(draws_out: dict, params: Params, directory: str) -> pd.DataFrame:
     """
     Write the 200,000 simulations to disk, and the table that reads them.

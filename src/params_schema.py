@@ -241,12 +241,43 @@ class DataParams:
     # SAFE TO CHANGE: yes.
     primary: str = 'zenodo'
 
-    # THE ELEMENT COMPOSITION, when it arrives. BLANK MEANS NOT YET: no
-    # source in the registry carries an element layer, so a stage that needs
-    # elements says so and stops rather than inventing them.
+    # ⚠️ THE ELEMENT LAYER'S SOURCE, declared here like every other. Matthias's
+    # own material-element definitions, copied from RAWCLICVehicleElectronics on
+    # 2026-09-21 and extended with the grade-class temperature that project did
+    # not need and this one does.
+    #
+    # `covers` is the whole range because a magnet grade's chemistry is not a
+    # vintage: N48SH is N48SH in 2015 and in 2070. What changes over time is
+    # WHICH grade a motor uses, and that is `run.magnet_grade`, not this file.
     # SAFE TO CHANGE: yes.
-    composition_file: str = ''
-    composition_sheet: str = ''
+    element_source: dict = field(default_factory=lambda: {
+        'file': os.path.join('data', 'raw',
+                             '10_MaterialElementDefinitions.xlsx'),
+        'sheet': 'PermanentMagnetNdFeB',
+        'role': 'data', 'tier': 'tier2',
+        'covers': (2010, 2070), 'horizon': 'historic',
+        'reads': 'elements',
+        'citation': 'Material element definitions, M. Roesslein, RAWCLIC; '
+                    '28 sintered NdFeB grades, min/max per element. Grade-class '
+                    'maximum working temperature and Curie temperature added '
+                    '2026-09-21, see data.magnet_grade_temperature for their '
+                    'sources.',
+    })
+
+    # THE ELEMENT COMPOSITION. It arrived on 2026-09-21 and this is no longer
+    # blank: `10_MaterialElementDefinitions.xlsx`, Matthias's own file, giving
+    # 28 sintered NdFeB grades as min/max per element. HANDOVER §7.2 -- "no
+    # e-m rows anywhere, Nd, Pr, Dy and Tb cannot be reported" -- is what this
+    # closes.
+    #
+    # The workbook also carries ElectricalSteel, Copper, CastAl and CastFeSteel,
+    # so the other four materials can have an element layer the same way. Only
+    # the magnet is built today, because only the magnet was asked for and
+    # because it is the one whose elements are under export control.
+    # SAFE TO CHANGE: yes.
+    composition_file: str = os.path.join('data', 'raw',
+                                         '10_MaterialElementDefinitions.xlsx')
+    composition_sheet: str = 'PermanentMagnetNdFeB'
 
     # THE THREE PARAMETER CODES, as the house schema spells them.
     #   c-p   this component, as a share of the product
@@ -592,6 +623,48 @@ class RunParams:
     # ⚠️ IT IS AN ASSUMPTION, and it is visible: rows carry `slope_borrowed`.
     # SAFE TO CHANGE: yes.
     min_segments_for_slope: int = 5
+
+    # ⚠️ WHICH MAGNET GRADE CLASS EACH MOTOR TYPE RUNS, AND THEREFORE HOW MUCH
+    # DYSPROSIUM AND TERBIUM IT CARRIES.
+    #
+    # Matthias 2026-09-21: SH for radial, H for axial flux -- "I am not sure if
+    # this hold true". IT IS RECORDED AS UNSURE ON PURPOSE. Nothing in any
+    # source in `sources` states a grade for a traction magnet, and this one
+    # setting moves dysprosium by a factor of roughly one and a half between
+    # neighbouring classes and terbium between zero and something. It is the
+    # first thing to vary and the first thing to replace with a real datasheet.
+    #
+    # WHY ONE CLASS LOWER FOR AXIAL FLUX, and it is a cooling argument, not a
+    # topology one. Matthias 2026-09-21: every European-built traction motor is
+    # OIL cooled, the copper coils sitting in oil; the Chinese-built cars sold
+    # in China -- not the ones sold in Europe -- use housing WATER cooling.
+    # Direct oil on the windings pulls heat out at the source instead of through
+    # the housing, so the magnet runs cooler, so a lower coercivity class holds.
+    # YASA's axial machine is an oil-cooled yokeless stator with the magnets on
+    # two discs and a short thermal path, which is the case for putting it a
+    # class below the radial machines.
+    #
+    # ⚠️ AND THAT IS WHY THIS IS A EUROPEAN-FLEET NUMBER. This project feeds a
+    # stock-and-flow model of the European fleet, so oil cooling is the norm
+    # that applies. A water-cooled machine of the same torque would need a
+    # higher class and more heavy rare earth for the same duty -- the same
+    # motor, a different number -- which is METHODOLOGY §4.3 and is now a
+    # setting rather than a paragraph.
+    #
+    # EESM IS IN THE TABLE AND HAS NO MAGNETS. Its entry is never read; it is
+    # written down so that the table has one row per motor type and nobody
+    # concludes a type was forgotten.
+    #
+    # The classes themselves, and what each is rated to, are
+    # `data.magnet_grade_temperature`. SAFE TO CHANGE: yes -- this and
+    # `scenario.floor` are the two settings worth arguing about first.
+    magnet_grade: dict[str, str] = field(default_factory=lambda: {
+        'PMElectricMotors': 'SH',
+        'IMandPMElectricMotors': 'SH',
+        'dualRotorRadialPMElectricMotors': 'SH',
+        'axialFluxPMElectricMotors': 'H',
+        'EESMElectricMotors': '',          # no magnets: never read
+    })
 
     # ⚠️ HOW UNCERTAIN A MACHINE BUILT FROM ONE DATA SHEET IS.
     #
