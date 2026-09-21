@@ -418,13 +418,68 @@ and defend.
 
 ### 4.2 Magnet chemistry follows the operating temperature
 
-**Decided 2026-09-18, and it is the distinctive claim in this project.**
+**Decided 2026-09-18, and it is the distinctive claim in this project.
+Quantified 2026-09-21 — it is no longer a mechanism without numbers.**
 
 The heavy rare earths — **dysprosium and terbium** — buy coercivity, and
 coercivity is what lets a magnet run hot without losing its magnetisation
 irreversibly. **How hot the magnet is allowed to get therefore decides how much
 Dy and Tb the magnet contains.** The magnet's composition is not a free
 parameter; it is set by the thermal design.
+
+#### The numbers, from `10_MaterialElementDefinitions.xlsx`
+
+Matthias's element workbook gives 28 sintered NdFeB grades as min/max per
+element. The grade suffix is a **minimum intrinsic coercivity class**, and the
+temperature each class is rated to is `data.magnet_grade_temperature`. Laid side
+by side, the mechanism is arithmetic:
+
+| class | max working °C | Dy | Tb | Co | Nd + Pr |
+|---|---|---|---|---|---|
+| N | 80 | 0 | 0 | 0 | 0.29–0.32 |
+| M | 100 | 0.03 | 0 | 0.05 | 0.29–0.32 |
+| H | 120 | 0.05 | 0 | 0.06 | 0.29–0.32 |
+| SH | 150 | 0.07 | 0.005 | 0.08 | 0.29–0.32 |
+| UH | 180 | 0.09 | 0.010 | 0.10 | 0.29–0.32 |
+| EH | 200 | 0.10 | 0.010 | 0.12 | 0.29–0.32 |
+| AH | 230 | 0.11 | 0.010 | 0.13 | 0.29–0.32 |
+
+**The didymium does not move.** Nd + Pr is 0.29–0.32 in every row: the grade
+does not change the neodymium, it changes the heavy rare earths. Cobalt climbs
+too, but cobalt is the Curie-temperature lever and not the coercivity one.
+
+**Two temperatures, and only one is ever met.** The maximum *working*
+temperature above is where irreversible loss begins. The Curie temperature,
+~320 °C, is where ferromagnetism goes entirely, and no traction motor
+approaches it. Neither figure is in the workbook or in any received report; both
+are declared with their sources in `params_schema`.
+
+⚠️ **The working figure is a class rating, not a property of the alloy.** It
+depends on the permeance coefficient — the magnet's geometry and load line in
+its actual circuit. Two magnets of one grade in different rotors have different
+real limits.
+
+#### And the grade is a scenario, because the evidence does not settle it
+
+Manufacturer-facing guidance for EV traction spans **SH to AH**: a supplier
+grade guide names N42SH/N45SH as standard at 150 °C, N48UH at 180 °C and N45EH
+at 200 °C; an automotive NdFeB applications guide puts traction at EH/AH,
+180–220 °C outright; and the engineering literature treats 150 °C as the
+temperature at which a controller must shut the motor down to avoid
+demagnetisation — which makes SH the bottom of the range rather than its middle.
+No teardown or OEM statement naming the grade in a real vehicle could be found.
+
+So `run.magnet_grade_scenarios` reports **SH (base), UH and EH** side by side.
+For a PMSM at 400 Nm in 2020, per vehicle:
+
+| | SH, 150 °C | UH, 180 °C | EH, 200 °C |
+|---|---|---|---|
+| Dy | 0.137 kg | 0.187 kg (×1.36) | 0.224 kg (×1.64) |
+| Tb | 0.006 kg | 0.012 kg (×2.00) | 0.012 kg (×2.00) |
+
+Terbium is identical for UH and EH because the workbook gives both the same
+0.000–0.010 band. Figure `09_magnet_grade_scenarios.png` draws all three as
+distributions and across all 61 years.
 
 ### 4.3 Cooling architecture follows heavy-rare-earth access — and that is geographic
 
@@ -443,6 +498,27 @@ to save cooling hardware.
 **This has to be reflected in the composition**, not mentioned in a note. A
 model that applies one magnet chemistry and one cooling mass to all motors
 describes neither fleet.
+
+#### Where this landed, 2026-09-21
+
+Matthias: every European-built traction motor is **oil cooled**, with the copper
+coils sitting in the oil; the Chinese-built cars sold **in China** — not the ones
+sold in Europe — use housing water cooling. Since this project feeds a
+stock-and-flow model of the **European** fleet, oil cooling is the norm that
+applies, and that is the case for SH rather than a hotter class.
+
+⚠️ **The axial-flux exception was tried and withdrawn.** Axial flux was set one
+class lower (H, 120 °C) for one afternoon on the argument that YASA's oil-cooled
+stator runs cooler. The manufacturer evidence did not support it: what the oil
+cools there is the **stator**, while the magnets sit on the rotor discs and are
+not in that oil path, and one supplier guide places N45EH at 200 °C in
+"high-performance axial flux" — two classes the *other* way, because power
+density in a thin package is a thermal problem rather than a solution. All four
+magnet-bearing types now take the same class, and the scenario carries the
+uncertainty instead.
+
+**The cooling mass end of the mechanism is still not quantified.** What is
+quantified is the magnet chemistry that the cooling choice permits.
 
 > Supporting, from DeepDrive's own page: **heavy-rare-earth-free magnets** are
 > being marketed as a design feature. That is the European constraint turned

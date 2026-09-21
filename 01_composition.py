@@ -49,7 +49,10 @@ import pandas as pd                                        # noqa: E402
 
 from src.composition import (CITATION, apply_corrections,   # noqa: E402
                              composition_by_torque, export_stock_and_flow,
-                             element_layer, magnet_element_check,
+                             element_layer, figure_distributions,
+                             figure_grade_scenarios,
+                             heavy_rare_earth_scenarios,
+                             magnet_element_check,
                              write_draws, write_element_draws,
                              figure_all_types,
                              figure_by_torque,
@@ -273,20 +276,46 @@ def main() -> int:
     _rule('Elements of the magnet')
     em_rows, element_mass, fractions = element_layer(grid, draws_out, params)
     if not em_rows.empty:
-        for motor, (names, drawn) in sorted(fractions.items()):
-            klass = params.run.magnet_grade[motor]
+        base = list(params.run.magnet_grade_scenarios)[0]
+        for klass in params.run.magnet_grade_scenarios:
+            names, drawn = fractions[('PMElectricMotors', klass)]
             shares = {name: drawn[:, position].mean()
                       for position, name in enumerate(names)}
-            print(f'  {motor:32} {klass:2} grade, '
-                  f'{params.data.magnet_grade_temperature[klass]} C   '
+            print(f'  {klass:2} grade, '
+                  f'{params.data.magnet_grade_temperature[klass]:3} C'
+                  f'{"  <- base" if klass == base else "        "}   '
                   f'Nd {shares["Nd"]:.3f}  Pr {shares["Pr"]:.4f}  '
-                  f'Dy {shares["Dy"]:.4f}  Tb {shares["Tb"]:.4f}')
-        checks = pd.DataFrame([magnet_element_check(params, motor, names, drawn)
-                               for motor, (names, drawn) in sorted(fractions.items())])
-        print(f'  iron is the balance: inside the stated band in '
-              f'{100 * checks.inside_stated.mean():.1f}% of draws, and inside '
-              f'it less cobalt in {100 * checks.inside_stated_less_cobalt.mean():.1f}% '
-              f'-- the stated iron includes the cobalt')
+                  f'Dy {shares["Dy"]:.4f}  Tb {shares["Tb"]:.4f}  '
+                  f'Co {shares["Co"]:.4f}')
+        checks = pd.DataFrame([
+            magnet_element_check(params, motor, names, drawn, grade_class=klass)
+            for (motor, klass), (names, drawn) in sorted(fractions.items())])
+        # Per scenario, not averaged: the stated iron band is the same
+        # 0.60-0.65 for SH, UH and EH while dysprosium and cobalt climb through
+        # them, so the closure gets worse with the class -- which is itself the
+        # evidence that the band is a nominal balance nobody recomputed.
+        print('  iron is the balance; the stated band is 0.60-0.65 for all '
+              'three classes:')
+        for klass, block in checks.groupby('TempClass', sort=False):
+            print(f'    {klass:2}  drawn {block.drawn_median.mean():.3f}   '
+                  f'inside stated {100 * block.inside_stated.mean():5.1f}%   '
+                  f'inside stated less cobalt '
+                  f'{100 * block.inside_stated_less_cobalt.mean():5.1f}%')
+
+        heavy = heavy_rare_earth_scenarios(element_mass, params)
+        if not heavy.empty:
+            mid = heavy[(heavy.componentKeyLevel1 == 'PMElectricMotors') &
+                        (heavy.torque_nm == 400)]
+            print(f'\n  What the grade costs, PMSM at 400 Nm, '
+                  f'{params.scenario.base_year}:')
+            for _, row in mid.iterrows():
+                print(f'    {row.element:2} {row.grade_class:2} '
+                      f'({row.TmaxOperating_C:3} C)  {row.kg_per_vehicle:.4f} kg'
+                      f'   x{row.times_base:.2f} of {row.base_class}')
+            heavy.to_csv(os.path.join(params.output.data_dir,
+                                      'TractionMotor_heavy_rare_earth_scenarios.csv'),
+                         index=False)
+
         em_rows.to_csv(os.path.join(params.output.data_dir,
                                     'TractionMotor_magnet_elements.csv'),
                        index=False)
@@ -296,8 +325,9 @@ def main() -> int:
         checks.to_csv(os.path.join(params.output.data_dir,
                                    'TractionMotor_element_checks.csv'), index=False)
         written = write_element_draws(fractions, params.output.draws_dir)
-        print(f'  {len(em_rows)} e-m rows, {len(element_mass):,} element-mass rows, '
-              f'{len(written)} chemistry draw arrays')
+        print(f'\n  {len(em_rows)} e-m rows, {len(element_mass):,} element-mass '
+              f'rows, {len(written)} chemistry draw arrays, '
+              f'{len(params.run.magnet_grade_scenarios)} grade scenarios')
 
     # THE DISTRIBUTION ITSELF, not a summary of it.
     manifest = write_draws(draws_out, params, params.output.draws_dir)
@@ -312,6 +342,16 @@ def main() -> int:
                after.assign(stage='after')]).to_csv(audit_path, index=False)
 
     figures = params.output.figures_dir
+    # THE DRAWS AS DISTRIBUTIONS. Every other figure here is a line and a band;
+    # these two plot the arrays themselves, including across all 13 years.
+    distribution_figures = [
+        figure_distributions(draws_out, params,
+                             os.path.join(figures, '08_distributions.png')),
+    ]
+    if not em_rows.empty:
+        distribution_figures.append(figure_grade_scenarios(
+            element_mass, fractions, draws_out, params,
+            os.path.join(figures, '09_magnet_grade_scenarios.png')))
     made = [
         figure_factors(params, os.path.join(figures, '01_material_efficiency.png'),
                        current=current_year),
@@ -327,7 +367,7 @@ def main() -> int:
         figure_by_torque(grid, params,
                          os.path.join(figures, '06_composition_by_torque.png'),
                          corrected=corrected),
-    ]
+    ] + distribution_figures
 
     print(f'  {out}.xlsx              {len(current_year)} rows, '
           f'{5 + len(params.scenario.copper_mass)} sheets')

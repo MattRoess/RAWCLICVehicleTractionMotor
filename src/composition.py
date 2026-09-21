@@ -1524,9 +1524,9 @@ def figure_factors(params, out_path: str, current: pd.DataFrame = None) -> str:
             if row_index == 0:
                 axis.set_title(title, fontsize=11)
             if row_index == len(motors) - 1:
-                axis.set_xlabel('Drehmoment [Nm]')
+                axis.set_xlabel('Torque [Nm]')
             if column_index == 0:
-                axis.set_ylabel(f'{MOTOR_LABEL.get(motor, motor)}\nkg je Motor',
+                axis.set_ylabel(f'{MOTOR_LABEL.get(motor, motor)}\nkg per motor',
                                 fontsize=9)
             axis.set_ylim(bottom=0)
             axis.set_xlim(left=0)
@@ -1534,10 +1534,10 @@ def figure_factors(params, out_path: str, current: pd.DataFrame = None) -> str:
 
     handles, labels = axes[0][0].get_legend_handles_labels()
     figure.legend(handles, labels, loc='lower center', ncol=len(show_years),
-                  fontsize=9.5, frameon=False, title='Jahr',
+                  fontsize=9.5, frameon=False, title='Year',
                   bbox_to_anchor=(0.5, -0.008))
-    figure.suptitle('Masse gegen Drehmoment, je Motortyp und Jahr \u2014 '
-                    'gleiches Drehmoment, weniger Material.\n'
+    figure.suptitle('Mass against torque, by motor type and year \u2014 '
+                    'same torque, less material.\n'
                     'Vergleichbar ist der rote Stern: Masse bei 500 Nm. '
                     'Die Fit-Koeffizienten sind es NICHT \u2014 '
                     'IM ist durch den Ursprung gefittet (n=3).', fontsize=11.5)
@@ -1604,18 +1604,18 @@ def figure_motor_mass(frame: pd.DataFrame, params, out_path: str) -> str:
         if not unreliable.empty:
             title += '\n⚠ enthält eine als unsicher markierte Masse'
         axis.set_title(title, fontsize=10.5)
-        axis.set_xlabel('Jahr')
+        axis.set_xlabel('Year')
         axis.grid(alpha=0.22, lw=0.6)
 
-    axes[0].set_ylabel(f'kg je Fahrzeug, Segment {segment}')
+    axes[0].set_ylabel(f'kg per vehicle, segment {segment}')
     handles, labels = axes[0].get_legend_handles_labels()
     figure.legend(handles, labels, loc='lower center', ncol=5, fontsize=9,
                   frameon=False, bbox_to_anchor=(0.5, -0.012))
     figure.suptitle(
-        f'Zusammensetzung je Motortyp über die Zeit, Segment {segment}, '
+        f'Composition by motor type over time, segment {segment}, '
         f'{params.scenario.base_voltage} V \u2014 Eingang für das '
         f'Stock-and-Flow-Modell\n'
-        'Nur 2020 ist gemessen; alles danach folgt scenario.floor und '
+        'Only 2020 is measured; everything after it follows scenario.floor and '
         'scenario.initial_rate', fontsize=11.5)
     figure.tight_layout(rect=(0, 0.055, 1, 1))
     figure.savefig(out_path, dpi=160)
@@ -1650,11 +1650,11 @@ def figure_critical(frame: pd.DataFrame, params, out_path: str) -> str:
         ratio = params.scenario.copper_mass[volts]
         axis.plot(series.index, series.values, lw=2.4,
                   color=shades.get(volts, '#B5651D'),
-                  label=f'{volts} V   Kupfermasse {ratio:.0%} von 400 V')
+                  label=f'{volts} V   copper mass {ratio:.0%} of 400 V')
     _mark_measured(axis, params, sorted(set(rows.productionYear)))
-    axis.set_title('Kupfer je Spannungsklasse, PMSM', fontsize=11.5)
+    axis.set_title('Copper by voltage class, PMSM', fontsize=11.5)
     axis.set_ylim(bottom=0)
-    axis.set_ylabel('kg je Motor, Segment C')
+    axis.set_ylabel('kg per motor, segment C')
 
     # ---- magnet and rare earth, by motor type ---------------------------
     axis = axes[1]
@@ -1670,17 +1670,17 @@ def figure_critical(frame: pd.DataFrame, params, out_path: str) -> str:
                   ls='--' if unreliable else '-',
                   label=motor + (' \u2014 Masse unsicher' if unreliable else ''))
     _mark_measured(axis, params, sorted(set(rows.productionYear)))
-    axis.set_title('Seltene Erden (Magnet) je Motortyp', fontsize=11.5)
+    axis.set_title('Rare earths (magnet) by motor type', fontsize=11.5)
     axis.set_ylim(bottom=0)
-    axis.set_ylabel('kg je Motor, Segment C')
+    axis.set_ylabel('kg per motor, segment C')
 
     for axis in axes:
-        axis.set_xlabel('Jahr')
+        axis.set_xlabel('Year')
         axis.legend(fontsize=9, framealpha=0.95)
         axis.grid(alpha=0.22, lw=0.6)
 
-    figure.suptitle('Kritische Werkstoffe je Motor \u2014 '
-                    'rot hinterlegt: von Quellen gedeckt, sonst konstruiert',
+    figure.suptitle('Critical materials per motor \u2014 '
+                    'red band: covered by sources, otherwise constructed',
                     fontsize=12.5)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
@@ -1805,8 +1805,8 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
                     xy=(row.torque_shaft, row.mass_kg), xytext=(8, drop),
                     textcoords='offset points', fontsize=7.8, color=colour)
 
-        axis.set_xlabel('Drehmoment an der Motorwelle [Nm]')
-        axis.set_ylabel('Masse ohne Getriebe [kg]')
+        axis.set_xlabel('Torque at the motor shaft [Nm]')
+        axis.set_ylabel('Mass excluding gearbox [kg]')
         axis.set_ylim(0, None)
         axis.grid(alpha=0.22, lw=0.6)
         axis.legend(fontsize=8.5, framealpha=0.95, loc='upper left')
@@ -1821,8 +1821,8 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
 
     figure.suptitle(
         'Alle Maschinen mit veröffentlichter Masse, gegen Wellendrehmoment.  '
-        'Getriebe überall ausgeschlossen.\n'
-        'Bänder: 95% aus Monte-Carlo-Ziehungen, Regression je Ziehung neu '
+        'Gearbox excluded throughout.\n'
+        'Bands: 95% from Monte Carlo draws, regression refitted on every draw '
         'gefittet.  Herstellerpunkte haben keine angegebene Unsicherheit.',
         fontsize=11.5)
     figure.tight_layout()
@@ -1855,8 +1855,8 @@ def figure_fleet(params, out_path: str) -> str:
 
     figure, axes = plt.subplots(1, 2, figsize=(14, 5.6))
     for axis, (column, label) in zip(axes, [
-            ('torque_per_motor', 'Drehmoment je Motor [Nm]'),
-            ('power_per_motor', 'Leistung je Motor [kW]')]):
+            ('torque_per_motor', 'Torque per motor [Nm]'),
+            ('power_per_motor', 'Power per motor [kW]')]):
         for index, segment in enumerate(segments):
             block = frame[frame.segment == segment]
             counts = block.groupby('year')[column].count()
@@ -1866,19 +1866,19 @@ def figure_fleet(params, out_path: str) -> str:
                 continue
             axis.plot(medians.index, medians.values, 'o-', ms=5, lw=2,
                       color=colours(index), label=f'{segment} (n={len(block)})')
-        axis.set_xlabel('Jahr des Markteintritts')
+        axis.set_xlabel('Year of market introduction')
         axis.set_ylabel(label)
         axis.set_ylim(bottom=0)
         axis.grid(alpha=0.25, lw=0.6)
         axis.legend(fontsize=8, ncol=2, framealpha=0.95, loc='lower right')
 
-    axes[0].set_title('Drehmoment je Motor: weitgehend flach',
+    axes[0].set_title('Torque per motor: largely flat',
                       fontsize=11.5)
-    axes[1].set_title('Leistung je Motor: leicht steigend, nicht überall',
+    axes[1].set_title('Power per motor: slightly rising, not everywhere',
                       fontsize=11.5)
     figure.suptitle(
         'Was die Flotte von ihren Motoren verlangt, EV Database, 1438 Modelle\n'
-        'Median je Segment, nur wo mindestens 5 Modelle das Jahr tragen',
+        'Median per segment, only where at least 5 models carry the year',
         fontsize=12)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
@@ -2364,8 +2364,8 @@ def magnet_chemistry(params: Params) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def magnet_element_draws(params: Params, motor: str,
-                         draws: int) -> tuple[list[str], np.ndarray]:
+def magnet_element_draws(params: Params, motor: str, draws: int,
+                         grade_class: str = '') -> tuple[list[str], np.ndarray]:
     """
     The magnet's element fractions, drawn, for one motor type's grade class.
 
@@ -2393,7 +2393,9 @@ def magnet_element_draws(params: Params, motor: str,
     0.29 the Critical Review confirms, to pay for slack in the trace elements.
     The iron that results is checked against its own stated band and reported.
     """
-    klass = params.run.magnet_grade.get(motor, '')
+    # `grade_class` is the scenario asking for a class other than the motor's
+    # own -- run.magnet_grade_scenarios. Without it, the motor's own is used.
+    klass = grade_class or params.run.magnet_grade.get(motor, '')
     if not klass:
         raise ValueError(f'{motor} has no magnet grade class in run.magnet_grade')
 
@@ -2435,7 +2437,7 @@ def magnet_element_draws(params: Params, motor: str,
 
 
 def magnet_element_check(params: Params, motor: str, names: list[str],
-                         drawn: np.ndarray) -> dict:
+                         drawn: np.ndarray, grade_class: str = '') -> dict:
     """
     The drawn iron against its stated band, and the reason it sits below it.
 
@@ -2455,7 +2457,7 @@ def magnet_element_check(params: Params, motor: str, names: list[str],
     Reported and not corrected: the workbook is Matthias's and this project
     does not edit a source. The finding says which reading the numbers support.
     """
-    klass = params.run.magnet_grade.get(motor, '')
+    klass = grade_class or params.run.magnet_grade.get(motor, '')
     band = magnet_chemistry(params)
     band = band[band.TempClass == klass].set_index('element')
     iron = drawn[:, names.index(MAGNET_BALANCE)]
@@ -2503,11 +2505,12 @@ def write_element_draws(fractions: dict, directory: str) -> list[str]:
     """
     os.makedirs(directory, exist_ok=True)
     written = []
-    for motor, (names, drawn) in sorted(fractions.items()):
-        path = os.path.join(directory, f'{motor}__magnet_element_fractions.npy')
+    for (motor, klass), (names, drawn) in sorted(fractions.items()):
+        path = os.path.join(
+            directory, f'{motor}__{klass}__magnet_element_fractions.npy')
         np.save(path, np.asarray(drawn, dtype=np.float32))
         with open(os.path.join(
-                directory, f'{motor}__magnet_elements.txt'), 'w') as handle:
+                directory, f'{motor}__{klass}__magnet_elements.txt'), 'w') as handle:
             handle.write('\n'.join(names) + '\n')
         written.append(os.path.basename(path))
     return written
@@ -2516,48 +2519,59 @@ def write_element_draws(fractions: dict, directory: str) -> list[str]:
 def element_layer(grid: pd.DataFrame, draws_out: dict,
                   params: Params) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """
-    The magnet's elements: `e-m` shares, and the kilograms inside the component.
+    The magnet's elements: `e-m` shares and the kilograms inside the component,
+    once per magnet grade scenario.
 
     HANDOVER §7.2 -- "No element layer. No `e-m` rows anywhere ... Nd, Pr, Dy
     and Tb cannot be reported" -- is what this closes, for the magnet.
 
     Returns `(em_rows, element_mass, fraction_draws)`.
 
-    `em_rows`      one row per motor type and element: the element as a share
-                   of the magnet, `parameterCode = e-m`, percentiles of the
-                   drawn chemistry. A share, so it carries no torque, year or
-                   voltage: the grade's chemistry is the same machine-sized-up.
-    `element_mass` the kilograms, per motor type, element, torque, year and
-                   voltage class -- the element INSIDE the component, which is
-                   what the recovery model reads.
-    `fraction_draws`  motor -> (names, (draws, n_elements)), persisted so the
-                   element mass of any draw is reconstructible exactly.
+    `em_rows`      one row per scenario, motor type and element: the element as
+                   a share of the magnet, `parameterCode = e-m`, percentiles of
+                   the drawn chemistry. A share, so no torque, year or voltage:
+                   a grade's chemistry does not change with the size of the
+                   machine.
+    `element_mass` the kilograms, per scenario, motor type, element, torque,
+                   year and voltage class -- the element INSIDE the component,
+                   which is what the recovery model reads.
+    `fraction_draws`  (motor, class) -> (names, (draws, n_elements)), persisted
+                   so the element mass of any draw is reconstructible exactly.
+
+    ⚠️ THREE SCENARIOS, AND THE FIRST IS THE BASE. `run.magnet_grade_scenarios`
+    is ('SH', 'UH', 'EH') because manufacturer guidance for EV traction spans
+    exactly that and no teardown settles it. Rows carry `grade_scenario` and
+    `is_base`, so the base case can be read alone and the other two stand beside
+    it as the answer to "what if traction magnets are really UH".
+    Every magnet-bearing motor takes the scenario's class.
 
     ⚠️ THE TWO UNCERTAINTIES ARE COMBINED PER DRAW, not multiplied as
     intervals. Draw i's element mass is draw i's magnet mass times draw i's
     chemistry. The magnet mass comes from the regression bootstrap and the
-    chemistry from the grade's specification band, and they are independent --
-    which is a statement the draws make correctly and percentile arithmetic
-    cannot make at all.
+    chemistry from the grade's specification band; they are independent, which
+    is a statement the draws make correctly and percentile arithmetic cannot
+    make at all.
 
-    ⚠️ WHICH GRADE, AND THEREFORE HOW MUCH DYSPROSIUM, IS AN ASSUMPTION.
-    `run.magnet_grade` is SH for the radial machines and H for axial flux, on a
-    cooling argument, and Matthias marked it unsure. Between those two classes
-    dysprosium runs 0.04-0.07 against 0.02-0.05 and terbium 0-0.005 against
-    nothing at all. Vary it before believing any rare-earth total here.
+    ⚠️ WHAT THE SCENARIO MOVES, AND WHAT IT DOES NOT. Dysprosium, terbium and
+    cobalt move with the class; the didymium does not, because Nd+Pr is
+    0.29-0.32 in every class of the workbook. So this isolates the heavy rare
+    earths, which is the point of it.
     """
     from src.params_schema import years_wanted
 
     draws = params.monte_carlo.draws
     years = years_wanted(params.run.years)
     magnet_key = 'magnet'
+    torques = sorted(grid.torque_nm.unique())
+
+    scenarios = list(params.run.magnet_grade_scenarios) or ['']
+    base_class = scenarios[0] if scenarios else ''
 
     em_rows, mass_rows, fractions = [], [], {}
     magnets = {motor: klass for motor, klass in params.run.magnet_grade.items()
                if klass}
 
-    for motor, klass in magnets.items():
-        # Every array of this motor's magnet, whatever component holds it.
+    for motor, own_class in magnets.items():
         arrays = [array for (this, _component, _sub, material), array
                   in draws_out.items()
                   if this == motor and material == magnet_key]
@@ -2567,62 +2581,346 @@ def element_layer(grid: pd.DataFrame, draws_out: dict,
         for array in arrays:
             magnet_draws += array
 
-        names, drawn = magnet_element_draws(params, motor, draws)
-        fractions[motor] = (names, drawn)
-
         component = next((component for (this, component, _s, material)
                           in draws_out if this == motor
                           and material == magnet_key), None)
 
-        for index, element in enumerate(names):
-            share = drawn[:, index]
-            em_rows.append({
-                'componentKeyLevel1': motor,
-                'componentKeyLevel2': component,
-                'materialClass': magnet_key,
-                'materialKeyLevel1': 'rareEarthMetalsAndAlloys',
-                'element': element,
-                'parameterCode': params.data.element_of_material,
-                'parameter': 'mass of element (kg) in the material',
-                'grade_class': klass,
-                'TmaxOperating_C': params.data.magnet_grade_temperature[klass],
-                'meanValue': float(np.median(share)),
-                'p025': float(np.percentile(share, 2.5)),
-                'p975': float(np.percentile(share, 97.5)),
-                'basis': f'{klass} grade class, drawn uniformly between the '
-                         f'class bounds of data.composition_file',
-            })
+        for klass in scenarios:
+            names, drawn = magnet_element_draws(params, motor, draws,
+                                                grade_class=klass)
+            fractions[(motor, klass)] = (names, drawn)
+            is_base = (klass == base_class)
 
-            # The kilograms. Only where the element is actually present --
-            # terbium is exactly zero below SH and a row of zeros with an
-            # interval of zero is the `zero-interval` defect, not a number.
-            if float(np.max(share)) <= 0.0:
-                continue
-            element_draws = magnet_draws * share[:, None]
-            median = np.median(element_draws, axis=0)
-            low = np.percentile(element_draws, 2.5, axis=0)
-            high = np.percentile(element_draws, 97.5, axis=0)
-            torques = sorted(grid.torque_nm.unique())
-            for volts in params.scenario.copper_mass:
-                for year in years:
-                    scale = factor(year, magnet_key, params)
-                    for position, torque in enumerate(torques):
-                        mass_rows.append({
-                            'componentKeyLevel1': motor,
-                            'componentKeyLevel2': component,
-                            'materialClass': magnet_key,
-                            'element': element,
-                            'parameterCode': params.data.element_of_material,
-                            'torque_nm': torque,
-                            'productionYear': year,
-                            'voltageClass': volts,
-                            'grade_class': klass,
-                            'meanValue': max(0.0, median[position] * scale),
-                            'p025': max(0.0, low[position] * scale),
-                            'p975': max(0.0, high[position] * scale),
-                        })
+            for index, element in enumerate(names):
+                share = drawn[:, index]
+                em_rows.append({
+                    'grade_scenario': klass,
+                    'is_base': is_base,
+                    'componentKeyLevel1': motor,
+                    'componentKeyLevel2': component,
+                    'materialClass': magnet_key,
+                    'materialKeyLevel1': 'rareEarthMetalsAndAlloys',
+                    'element': element,
+                    'parameterCode': params.data.element_of_material,
+                    'parameter': 'mass of element (kg) in the material',
+                    'grade_class': klass,
+                    'TmaxOperating_C': params.data.magnet_grade_temperature[klass],
+                    'meanValue': float(np.median(share)),
+                    'p025': float(np.percentile(share, 2.5)),
+                    'p975': float(np.percentile(share, 97.5)),
+                    'basis': f'{klass} grade class, drawn uniformly between the '
+                             f'class bounds of data.composition_file',
+                })
+
+                # Only where the element is actually present. Terbium is exactly
+                # zero below SH, and a row of zeros with an interval of zero is
+                # the `zero-interval` defect, not a number.
+                if float(np.max(share)) <= 0.0:
+                    continue
+                element_draws = magnet_draws * share[:, None]
+                median = np.median(element_draws, axis=0)
+                low = np.percentile(element_draws, 2.5, axis=0)
+                high = np.percentile(element_draws, 97.5, axis=0)
+                for volts in params.scenario.copper_mass:
+                    for year in years:
+                        scale = factor(year, magnet_key, params)
+                        for position, torque in enumerate(torques):
+                            mass_rows.append({
+                                'grade_scenario': klass,
+                                'is_base': is_base,
+                                'componentKeyLevel1': motor,
+                                'componentKeyLevel2': component,
+                                'materialClass': magnet_key,
+                                'element': element,
+                                'parameterCode': params.data.element_of_material,
+                                'torque_nm': torque,
+                                'productionYear': year,
+                                'voltageClass': volts,
+                                'grade_class': klass,
+                                'TmaxOperating_C':
+                                    params.data.magnet_grade_temperature[klass],
+                                'meanValue': max(0.0, median[position] * scale),
+                                'p025': max(0.0, low[position] * scale),
+                                'p975': max(0.0, high[position] * scale),
+                            })
 
     return (pd.DataFrame(em_rows), pd.DataFrame(mass_rows), fractions)
+
+
+def heavy_rare_earth_scenarios(element_mass: pd.DataFrame,
+                               params: Params) -> pd.DataFrame:
+    """
+    What the grade scenario costs in dysprosium and terbium, side by side.
+
+    The table the scenario exists to produce: per motor type and element, the
+    base case and each alternative, and the ratio between them. Read at the base
+    year and base voltage -- the year and voltage factors are common to every
+    scenario, so they would cancel in the ratio anyway.
+    """
+    if element_mass.empty:
+        return pd.DataFrame()
+
+    heavy = element_mass[
+        element_mass.element.isin(['Dy', 'Tb']) &
+        (element_mass.productionYear == params.scenario.base_year) &
+        (element_mass.voltageClass == params.scenario.base_voltage)]
+    if heavy.empty:
+        return pd.DataFrame()
+
+    base_class = list(params.run.magnet_grade_scenarios)[0]
+    rows = []
+    for (motor, element, torque), block in heavy.groupby(
+            ['componentKeyLevel1', 'element', 'torque_nm']):
+        by_class = block.set_index('grade_class').meanValue
+        base = by_class.get(base_class, np.nan)
+        for klass, value in by_class.items():
+            rows.append({
+                'componentKeyLevel1': motor,
+                'element': element,
+                'torque_nm': torque,
+                'grade_class': klass,
+                'TmaxOperating_C': params.data.magnet_grade_temperature[klass],
+                'kg_per_vehicle': value,
+                'base_class': base_class,
+                'times_base': (value / base if base and not np.isnan(base)
+                               else np.nan),
+            })
+    return pd.DataFrame(rows).sort_values(
+        ['componentKeyLevel1', 'element', 'torque_nm', 'TmaxOperating_C'])
+
+
+MOTOR_COLOURS = {
+    'PMElectricMotors': '#1F4E79',
+    'EESMElectricMotors': '#2E8B57',
+    'IMandPMElectricMotors': '#B5651D',
+    'axialFluxPMElectricMotors': '#7B4397',
+    'dualRotorRadialPMElectricMotors': '#C0392B',
+}
+MATERIAL_COLOURS = {
+    'lamination': '#4A6FA5', 'copper': '#B5651D', 'magnet': '#C0392B',
+    'steel': '#7F8C8D', 'aluminium': '#7FB3D5',
+}
+GRADE_COLOURS = {'SH': '#2E8B57', 'UH': '#D68910', 'EH': '#C0392B',
+                 'H': '#5DADE2', 'M': '#85C1E9', 'N': '#AED6F1',
+                 'AH': '#7B241C'}
+
+
+def figure_distributions(draws_out: dict, params: Params, out_path: str,
+                         torque: float = 400.0) -> str:
+    """
+    The 200,000 draws as distributions, which is what they are.
+
+    ⚠️ EVERY OTHER FIGURE HERE DRAWS A LINE AND A BAND. Matthias 2026-09-21:
+    the distributions are missing from the figures. A band is two percentiles of
+    a shape, and the shape is the thing that was computed -- whether it is
+    symmetric, whether it is skewed by the clip at zero, whether a spec machine's
+    is three times the width of a fitted one. This plots the arrays.
+
+    Three panels, all at one torque and the base year:
+      left    every material of the PMSM, so the widths are comparable
+      middle  the magnet of every motor type, which is where the bases differ
+      right   the PMSM magnet across all 13 years, as violins, so the scenario
+              curve is visible as a moving distribution and not a line
+    """
+    import matplotlib.pyplot as plt
+    from src.params_schema import years_wanted
+
+    grid = years_wanted(params.run.torque_grid)
+    column = min(range(len(grid)), key=lambda i: abs(grid[i] - torque))
+    years = years_wanted(params.run.years)
+
+    figure, axes = plt.subplots(1, 3, figsize=(16.5, 5.2))
+
+    # ---- every material of one motor -----------------------------------
+    axis = axes[0]
+    for klass in MATERIAL_COLOURS:
+        arrays = [array for (motor, _c, _s, material), array in draws_out.items()
+                  if motor == 'PMElectricMotors' and material == klass]
+        if not arrays:
+            continue
+        total = np.zeros(arrays[0].shape[0])
+        for array in arrays:
+            total += array[:, column]
+        axis.hist(total, bins=160, histtype='step', lw=1.9, density=True,
+                  color=MATERIAL_COLOURS[klass],
+                  label=f'{klass}  {np.median(total):.1f} kg')
+    axis.set_title(f'PMSM, every material at {grid[column]:.0f} Nm',
+                   fontsize=11.5)
+    axis.set_xlabel('kg per vehicle')
+    axis.set_ylabel('density of the 200,000 draws')
+    axis.legend(fontsize=8.5, frameon=False)
+
+    # ---- the magnet of every motor type --------------------------------
+    axis = axes[1]
+    for motor, colour in MOTOR_COLOURS.items():
+        arrays = [array for (this, _c, _s, material), array in draws_out.items()
+                  if this == motor and material == 'magnet']
+        if not arrays:
+            continue
+        total = np.zeros(arrays[0].shape[0])
+        for array in arrays:
+            total += array[:, column]
+        width = (np.percentile(total, 97.5) - np.percentile(total, 2.5)) / \
+            (2 * np.median(total))
+        axis.hist(total, bins=160, histtype='step', lw=1.9, density=True,
+                  color=colour,
+                  label=f'{motor.replace("ElectricMotors", "")}  '
+                        f'{np.median(total):.2f} kg  ±{width:.0%}')
+    axis.set_title(f'Magnet mass by motor type at {grid[column]:.0f} Nm',
+                   fontsize=11.5)
+    axis.set_xlabel('kg per vehicle')
+    axis.legend(fontsize=8.5, frameon=False)
+    axis.annotate('The two data-sheet machines are markedly wider:\n'
+                  'one data sheet, not a segment fit',
+                  xy=(0.02, 0.86), xycoords='axes fraction', fontsize=8.2,
+                  color='#555555')
+
+    # ---- every motor type over time, with its band ----------------------
+    #
+    # ⚠️ NOT A VIOLIN PER YEAR. That was tried and dropped: at 61 years the
+    # violins are an illegible smear, and one machine's magnet repeated 61 times
+    # is not a figure anyway. What is worth seeing is the five motor types
+    # against each other over time, each with the band its own evidence
+    # supports -- narrow where eleven segments hold the fit, wide where one data
+    # sheet does.
+    #
+    # ⚠️ AND THIS IS NOT A STOCK AND FLOW. It is one machine at one torque, not
+    # a fleet: the drawn mass multiplied by `factor(year)`, the saturating
+    # exponential of §4.1, per material because each material has its own rate.
+    axis = axes[2]
+    for motor, colour in MOTOR_COLOURS.items():
+        by_material: dict[str, np.ndarray] = {}
+        for (this, _component, _sub, material), array in draws_out.items():
+            if this != motor:
+                continue
+            by_material[material] = (by_material.get(material, 0.0)
+                                     + array[:, column].astype(np.float64))
+        if not by_material:
+            continue
+        median, low, high = [], [], []
+        for year in years:
+            total = np.zeros(next(iter(by_material.values())).shape[0])
+            for material, draws_for_material in by_material.items():
+                total += draws_for_material * factor(year, material, params)
+            median.append(np.median(total))
+            low.append(np.percentile(total, 2.5))
+            high.append(np.percentile(total, 97.5))
+        axis.plot(years, median, lw=2.3, color=colour,
+                  label=f'{motor.replace("ElectricMotors", "")}  '
+                        f'{median[0]:.0f}→{median[-1]:.0f} kg')
+        axis.fill_between(years, low, high, color=colour, alpha=0.15, lw=0)
+    _mark_measured(axis, params, years)
+    measured_count = sum(1 for year in years
+                         if params.data.year_is_measured(year))
+    axis.set_title(f'Total mass by motor type at {grid[column]:.0f} Nm, '
+                   f'95% band', fontsize=11.5)
+    axis.set_ylabel('kg per vehicle')
+    axis.set_xlabel('Year')
+    axis.set_ylim(bottom=0)
+    axis.legend(fontsize=8.5, frameon=False)
+    axis.annotate(f'One machine, not a fleet: no stock and flow here.\n'
+                  f'{measured_count} of {len(years)} years measured (red band); '
+                  f'the rest is factor(year), §4.1.',
+                  xy=(0.03, 0.05), xycoords='axes fraction', fontsize=8.2,
+                  color='#555555')
+
+    figure.tight_layout()
+    figure.savefig(out_path, dpi=160)
+    plt.close(figure)
+    return out_path
+
+
+def figure_grade_scenarios(element_mass: pd.DataFrame, fractions: dict,
+                           draws_out: dict, params: Params,
+                           out_path: str, torque: float = 400.0) -> str:
+    """
+    What the magnet grade costs in dysprosium, as distributions and over time.
+
+    The figure the grade scenario exists for. `run.magnet_grade_scenarios` is
+    SH, UH and EH because manufacturer guidance for EV traction spans exactly
+    that and nothing settles it, so the honest presentation is all three at once.
+    """
+    import matplotlib.pyplot as plt
+    from src.params_schema import years_wanted
+
+    grid = years_wanted(params.run.torque_grid)
+    column = min(range(len(grid)), key=lambda i: abs(grid[i] - torque))
+    years = years_wanted(params.run.years)
+    scenarios = list(params.run.magnet_grade_scenarios)
+    motor = 'PMElectricMotors'
+
+    arrays = [array for (this, _c, _s, material), array in draws_out.items()
+              if this == motor and material == 'magnet']
+    magnet = np.zeros(arrays[0].shape[0])
+    for array in arrays:
+        magnet += array[:, column]
+
+    figure, axes = plt.subplots(1, 3, figsize=(16.5, 5.2))
+
+    # ---- Dy and Tb as distributions, one panel each ---------------------
+    for panel, element in enumerate(('Dy', 'Tb')):
+        axis = axes[panel]
+        for klass in scenarios:
+            names, drawn = fractions[(motor, klass)]
+            share = drawn[:, names.index(element)]
+            mass = magnet * share
+            if mass.max() <= 0:
+                continue
+            axis.hist(mass, bins=160, histtype='step', lw=2.0, density=True,
+                      color=GRADE_COLOURS.get(klass, '#555555'),
+                      label=f'{klass}  ({params.data.magnet_grade_temperature[klass]} °C)  '
+                            f'{np.median(mass):.3f} kg')
+        axis.set_title(f'{element} per vehicle, PMSM at {grid[column]:.0f} Nm',
+                       fontsize=11.5)
+        axis.set_xlabel('kg per vehicle')
+        if panel == 0:
+            axis.set_ylabel('density of the 200,000 draws')
+        axis.legend(fontsize=8.5, frameon=False, title='Grade class',
+                    title_fontsize=8.5)
+
+        # Two classes can share a band, and then one curve hides the other.
+        # Terbium is 0.000-0.010 for BOTH UH and EH in the workbook, so their
+        # distributions are identical and the reader has to be told that rather
+        # than left to conclude a scenario is missing.
+        bands = {klass: tuple(magnet_chemistry(params).query(
+                     'TempClass == @klass and element == @element')
+                     [['low', 'high']].iloc[0])
+                 for klass in scenarios}
+        shared = [klass for klass in scenarios
+                  if list(bands.values()).count(bands[klass]) > 1]
+        if shared:
+            axis.annotate(f'{" and ".join(shared)} share the same '
+                          f'{element} band in the source sheet:\nthe curves lie '
+                          f'exactly on top of each other',
+                          xy=(0.03, 0.72), xycoords='axes fraction',
+                          fontsize=8.2, color='#555555')
+
+    # ---- through all the years -----------------------------------------
+    axis = axes[2]
+    heavy = element_mass[(element_mass.componentKeyLevel1 == motor) &
+                         (element_mass.element == 'Dy') &
+                         (element_mass.torque_nm == grid[column]) &
+                         (element_mass.voltageClass == params.scenario.base_voltage)]
+    for klass in scenarios:
+        block = heavy[heavy.grade_class == klass].sort_values('productionYear')
+        if block.empty:
+            continue
+        colour = GRADE_COLOURS.get(klass, '#555555')
+        axis.plot(block.productionYear, block.meanValue, lw=2.4, color=colour,
+                  label=f'{klass} ({params.data.magnet_grade_temperature[klass]} °C)')
+        axis.fill_between(block.productionYear, block.p025, block.p975,
+                          color=colour, alpha=0.16, lw=0)
+    _mark_measured(axis, params, years)
+    axis.set_title('Dysprosium across all years, with 95% band', fontsize=11.5)
+    axis.set_ylabel('kg per vehicle')
+    axis.set_ylim(bottom=0)
+    axis.legend(fontsize=8.5, frameon=False, title='Grade class',
+                title_fontsize=8.5)
+
+    figure.tight_layout()
+    figure.savefig(out_path, dpi=160)
+    plt.close(figure)
+    return out_path
 
 
 def write_draws(draws_out: dict, params: Params, directory: str) -> pd.DataFrame:
@@ -2864,16 +3162,16 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
                            [500.0]).iloc[0])
         axis.set_title(f'{MATERIAL_LABEL[klass].split(" (")[0]}\n'
                        f'\u00b1{width / 2:.0%} bei 500 Nm', fontsize=10)
-        axis.set_xlabel('Drehmoment [Nm]')
+        axis.set_xlabel('Torque [Nm]')
         axis.set_ylim(bottom=0)
         axis.grid(alpha=0.22, lw=0.6)
 
-    axes[0].set_ylabel('kg je Fahrzeug')
+    axes[0].set_ylabel('kg per vehicle')
     handles, labels = axes[0].get_legend_handles_labels()
     figure.legend(handles, labels, loc='lower center', ncol=3, fontsize=9,
-                  frameon=False, title='Jahr', bbox_to_anchor=(0.5, -0.02))
+                  frameon=False, title='Year', bbox_to_anchor=(0.5, -0.02))
     figure.suptitle(
-        f'Masse je Werkstoff gegen Drehmoment \u2014 '
+        f'Mass per material against torque \u2014 '
         f'{MOTOR_LABEL.get(motor, motor)}, {params.scenario.base_voltage} V.  '
         'Kein Segment.\n'
         'Band: Unsicherheit DES FITS (Bootstrap der Segmente), nur 2020.  '
@@ -2946,7 +3244,7 @@ def figure_all_types(grid: pd.DataFrame, params, out_path: str,
         # induction configuration -- it appears in three segments only, and
         # that is exactly why its band is enormous.
         count = int(base.n_segments.max()) if 'n_segments' in base else 0
-        source = (f'{count} Segmente' if fitted else '1 Datenblatt')
+        source = (f'{count} Segmente' if fitted else '1 data sheet')
         warn = '  \u26a0' if fitted and count < 5 else ''
         axis.set_title(f'{MOTOR_LABEL.get(motor, motor)}\n'
                        f'{source}   \u00b1{width:.0%}{warn}', fontsize=9.5)
@@ -2958,17 +3256,17 @@ def figure_all_types(grid: pd.DataFrame, params, out_path: str,
                           style='italic')
             # Keep the panel readable; the band's own number is in the title.
             axis.set_ylim(0, float(total.meanValue.max()) * 2.2)
-        axis.set_xlabel('Drehmoment [Nm]')
+        axis.set_xlabel('Torque [Nm]')
         axis.set_ylim(bottom=0)
         axis.grid(alpha=0.22, lw=0.6)
-        axis.legend(fontsize=8, framealpha=0.95, loc='upper left', title='Jahr')
+        axis.legend(fontsize=8, framealpha=0.95, loc='upper left', title='Year')
 
-    axes[0].set_ylabel('Masse je Fahrzeug [kg]')
+    axes[0].set_ylabel('Mass per vehicle [kg]')
     figure.suptitle(
-        'Alle fünf Motortypen: Masse gegen Drehmoment, '
+        'All five motor types: mass against torque, '
         f'{params.scenario.base_voltage} V, kein Segment.\n'
-        f'Bänder: 95% aus {params.monte_carlo.draws:,} Monte-Carlo-Ziehungen.  '
-        'Blau: aus Segmenten gefittet.  Orange: aus EINEM Datenblatt, '
+        f'Bands: 95% from {params.monte_carlo.draws:,} Monte Carlo draws.  '
+        'Blue: fitted from segments.  Orange: from ONE data sheet, '
         'Stern = die Maschine', fontsize=11)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)

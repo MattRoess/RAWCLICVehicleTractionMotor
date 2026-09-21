@@ -438,7 +438,19 @@ class RunParams:
     # trajectory here means the 2020 composition repeated, which is a
     # statement about the world and not a neutral default.
     # SAFE TO CHANGE: yes.
-    years: str = '2010-2070, 5'
+    # ⚠️ EVERY YEAR, NOT EVERY FIFTH. Matthias 2026-09-21: "We need the
+    # composition for each year." 61 years instead of 13.
+    #
+    # The consumer is why. `04_03_tractionmotors.py` extends the composition to
+    # every cohort year the fleet tracker contains, and a 5-year grid would have
+    # made it interpolate between our years -- a second interpolation on top of
+    # the one `factor()` already is, done by a stage that does not know the
+    # curve. Handing it every year moves that arithmetic to the project that
+    # owns the assumption.
+    #
+    # It costs rows and not draws: the year factor is a deterministic scalar, so
+    # the 200,000-draw arrays are unchanged and only the summarised tables grow.
+    years: str = '2010-2070'
 
     # ******************************************************************
     #  THE MOTORS DESCRIBED, and WHERE EACH ONE'S NUMBERS COME FROM.
@@ -696,9 +708,45 @@ class RunParams:
         'PMElectricMotors': 'SH',
         'IMandPMElectricMotors': 'SH',
         'dualRotorRadialPMElectricMotors': 'SH',
-        'axialFluxPMElectricMotors': 'H',
+        # ⚠️ SH, NOT H. Matthias 2026-09-21, after the manufacturer evidence
+        # came back: axial flux takes the same class as the radial machines.
+        # The H it had for one afternoon rested on YASA's oil cooling, and what
+        # oil cools there is the STATOR -- the magnets sit on the rotor discs
+        # and are not in that oil path. No supplier guidance puts axial flux
+        # below a radial machine, and one puts N45EH at 200 C in "high-
+        # performance axial flux", two classes the other way, because power
+        # density in a thin package is a thermal problem and not a solution.
+        'axialFluxPMElectricMotors': 'SH',
         'EESMElectricMotors': '',          # no magnets: never read
     })
+
+    # ⚠️ THE GRADE AS A SCENARIO, BECAUSE THE EVIDENCE SPANS THREE CLASSES.
+    #
+    # Matthias 2026-09-21: SH for both, "but also have a separate scenario for
+    # UH and one for EH so one can understand the Dy material needs".
+    #
+    # WHY IT CANNOT BE SETTLED WITH ONE NUMBER. Manufacturer-facing guidance for
+    # EV traction spans SH to AH: a supplier grade guide names N42SH/N45SH as
+    # standard at 150 C, N48UH at 180 C and N45EH at 200 C, while an automotive
+    # NdFeB applications guide puts traction at EH/AH, 180-220 C outright. And
+    # the engineering literature treats 150 C as the temperature a controller
+    # must shut the motor down at to avoid demagnetisation -- which makes SH the
+    # bottom of the range rather than the middle of it. No teardown or OEM
+    # statement naming the grade in a real vehicle could be found at all.
+    #
+    # So the first entry is the base case and the rest are reported beside it.
+    # Every magnet-bearing motor takes the scenario's class, which answers the
+    # question actually being asked: what does the fleet's dysprosium come to if
+    # traction magnets are really UH, or really EH.
+    #
+    # WHAT IT MOVES. Between these three, Dy runs 0.055 -> 0.075 -> 0.090 of
+    # magnet mass, so EH is two thirds more dysprosium than SH for the same
+    # motor. Terbium and cobalt move with it. The didymium does NOT: Nd+Pr is
+    # 0.29-0.32 in every class, so this scenario isolates the heavy rare earths,
+    # which is what it is for.
+    # SAFE TO CHANGE: yes. The first is the base; drop the others and the
+    # comparison simply is not written.
+    magnet_grade_scenarios: tuple[str, ...] = ('SH', 'UH', 'EH')
 
     # ⚠️ HOW UNCERTAIN A MACHINE BUILT FROM ONE DATA SHEET IS.
     #
