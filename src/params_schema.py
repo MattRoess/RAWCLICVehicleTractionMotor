@@ -845,11 +845,26 @@ class MonteCarloParams:
 class OutputParams:
     """Where what this project produces is written."""
 
-    # WHAT THE STAGES WRITE. Not `documentation/`, which holds what was
-    # received and what is written about it, and not `data/raw/`, which holds
-    # what they read.
+    # WHAT THE STAGES WRITE, and the reason every folder under `data/` says in
+    # its own name what is in it. Matthias 2026-09-21: clean folders, easy to
+    # understand. Three of them, the same three the battery project has:
+    #
+    #   data/raw/           what this code OPENS -- the Zenodo workbook, the
+    #                       EV Database snapshot. Nothing else.
+    #   data/composition/   what this project PRODUCES for its own use. Here.
+    #   data/consolidated/  the two files ANOTHER REPOSITORY reads. Nothing else.
+    #
+    # AND NO ORPHANS. Matthias 2026-09-21: data no stage writes any more does not
+    # get an archive folder, it goes. Four files from the vanished three-stage
+    # design -- 01_source_audit, 02_stator_reading, 03_corrected_composition and
+    # 03_corrections_log, written by scripts deleted in 5663f95 -- were removed on
+    # that rule. If a folder here holds something no code in this repository
+    # writes, that is the bug.
+    #
+    # `documentation/` is none of those: it holds what was received and what is
+    # written about it.
     # SAFE TO CHANGE: yes.
-    data_dir: str = 'data'
+    data_dir: str = os.path.join('data', 'composition')
 
     # ⚠️ THE ONE FOLDER ANOTHER PROJECT READS. Matthias 2026-09-21: traction
     # motor information lives here and nowhere else, so the stock-and-flow

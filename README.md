@@ -36,6 +36,12 @@ the figures. Auditing and correcting are one argument, not two tasks.
 
 ### What it writes, into `data/`
 
+`data/` has three folders and each says what is in it: **`raw/`** what this code
+opens, **`composition/`** what it produces for its own use, **`consolidated/`**
+the two files another repository reads. Nothing else lives under `data/` -- if a
+file there is written by no stage in this repository, that is a bug, not an
+archive.
+
 Into `data/consolidated/`, which is the whole interface to the stock-and-flow
 model and holds nothing else:
 
@@ -44,7 +50,7 @@ model and holds nothing else:
 | `TractionMotor_for_stockandflow.xlsx` | what `04_03_tractionmotors.py` reads, 13 299 rows, house schema |
 | `TractionMotor_for_stockandflow.csv` | the same, for anything reading text |
 
-Into `data/`, for this project's own use:
+Into `data/composition/`, for this project's own use:
 
 | file | |
 |---|---|

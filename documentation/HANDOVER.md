@@ -22,6 +22,16 @@ audit, the corrections, the draws and the figures. **Every setting is in
 
 ### Where the files are, since 2026-09-21
 
+`data/` has exactly three folders, the same three the battery project has, and
+each says what is in it: **`raw/`** what this code opens, **`composition/`** what
+it produces for itself, **`consolidated/`** the two files another repository
+reads.
+
+**And no orphans.** Four files from the vanished three-stage design
+(`01_source_audit`, `02_stator_reading`, `03_corrected_composition`,
+`03_corrections_log`, written by scripts deleted in `5663f95`) were removed on
+2026-09-21. Data no stage writes any more does not get an archive folder.
+
 **A file this code opens lives in `data/raw/`** — the Zenodo consolidated
 workbook and the EV Database snapshot, and nothing else. `documentation/` holds
 what a person reads and transcribes: the Drexler paper, the reports, the
@@ -41,7 +51,7 @@ traction motor information is in this project and nowhere else.
 | `TractionMotor_for_stockandflow.xlsx` | what `04_03_tractionmotors.py` reads, 13 299 rows |
 | `TractionMotor_for_stockandflow.csv` | the same, for anything reading text |
 
-### And into `data/`, for this project's own use
+### And into `data/composition/`, for this project's own use
 
 | file | |
 |---|---|
