@@ -2752,7 +2752,7 @@ def figure_distributions(draws_out: dict, params: Params, out_path: str,
     column = min(range(len(grid)), key=lambda i: abs(grid[i] - torque))
     years = years_wanted(params.run.years)
 
-    figure, axes = plt.subplots(1, 3, figsize=(16.5, 5.2))
+    figure, axes = plt.subplots(1, 4, figsize=(21.5, 5.2))
 
     # ---- every material of one motor -----------------------------------
     axis = axes[0]
@@ -2810,42 +2810,59 @@ def figure_distributions(draws_out: dict, params: Params, out_path: str,
     # ⚠️ AND THIS IS NOT A STOCK AND FLOW. It is one machine at one torque, not
     # a fleet: the drawn mass multiplied by `factor(year)`, the saturating
     # exponential of §4.1, per material because each material has its own rate.
-    axis = axes[2]
-    for motor, colour in MOTOR_COLOURS.items():
-        by_material: dict[str, np.ndarray] = {}
-        for (this, _component, _sub, material), array in draws_out.items():
-            if this != motor:
-                continue
-            by_material[material] = (by_material.get(material, 0.0)
-                                     + array[:, column].astype(np.float64))
-        if not by_material:
-            continue
-        median, low, high = [], [], []
-        for year in years:
-            total = np.zeros(next(iter(by_material.values())).shape[0])
-            for material, draws_for_material in by_material.items():
-                total += draws_for_material * factor(year, material, params)
-            median.append(np.median(total))
-            low.append(np.percentile(total, 2.5))
-            high.append(np.percentile(total, 97.5))
-        axis.plot(years, median, lw=2.3, color=colour,
-                  label=f'{motor.replace("ElectricMotors", "")}  '
-                        f'{median[0]:.0f}→{median[-1]:.0f} kg')
-        axis.fill_between(years, low, high, color=colour, alpha=0.15, lw=0)
-    _mark_measured(axis, params, years)
     measured_count = sum(1 for year in years
                          if params.data.year_is_measured(year))
-    axis.set_title(f'Total mass by motor type at {grid[column]:.0f} Nm, '
-                   f'95% band', fontsize=11.5)
-    axis.set_ylabel('kg per vehicle')
-    axis.set_xlabel('Year')
-    axis.set_ylim(bottom=0)
-    axis.legend(fontsize=8.5, frameon=False)
-    axis.annotate(f'One machine, not a fleet: no stock and flow here.\n'
-                  f'{measured_count} of {len(years)} years measured (red band); '
-                  f'the rest is factor(year), §4.1.',
-                  xy=(0.03, 0.05), xycoords='axes fraction', fontsize=8.2,
-                  color='#555555')
+
+    def over_time(axis, only, title: str, decimals: int) -> None:
+        """
+        Every motor type against the years, with its 95% band.
+
+        `only` picks a single material. The magnet gets its own panel because
+        at 2.5 kg of a 98 kg machine it is a flat line along the bottom of the
+        total, while being the reason anybody is reading this at all -- and
+        because EESM simply is not in that panel, which is the comparison worth
+        being able to see.
+        """
+        for motor, colour in MOTOR_COLOURS.items():
+            by_material = {}
+            for (this, _component, _sub, material), array in draws_out.items():
+                if this != motor or (only is not None and material != only):
+                    continue
+                by_material[material] = (by_material.get(material, 0.0)
+                                         + array[:, column].astype(np.float64))
+            if not by_material:
+                continue
+            median, low, high = [], [], []
+            for year in years:
+                total = np.zeros(next(iter(by_material.values())).shape[0])
+                for material, draws_for_material in by_material.items():
+                    total += draws_for_material * factor(year, material, params)
+                median.append(np.median(total))
+                low.append(np.percentile(total, 2.5))
+                high.append(np.percentile(total, 97.5))
+            axis.plot(years, median, lw=2.3, color=colour,
+                      label=f'{motor.replace("ElectricMotors", "")}  '
+                            f'{median[0]:.{decimals}f}→'
+                            f'{median[-1]:.{decimals}f} kg')
+            axis.fill_between(years, low, high, color=colour, alpha=0.15, lw=0)
+        _mark_measured(axis, params, years)
+        axis.set_title(title, fontsize=11.5)
+        axis.set_ylabel('kg per vehicle')
+        axis.set_xlabel('Year')
+        axis.set_ylim(bottom=0)
+        axis.legend(fontsize=8.5, frameon=False)
+        axis.annotate(f'One machine, not a fleet: no stock and flow here.\n'
+                      f'{measured_count} of {len(years)} years measured '
+                      f'(red band); the rest is factor(year), §4.1.',
+                      xy=(0.03, 0.05), xycoords='axes fraction', fontsize=8.2,
+                      color='#555555')
+
+    over_time(axes[2], None,
+              f'Total mass by motor type at {grid[column]:.0f} Nm, 95% band', 0)
+    # ⚠️ THE PERMANENT MAGNET OVER TIME, its own panel. Matthias 2026-09-21.
+    over_time(axes[3], 'magnet',
+              f'Permanent magnet by motor type at {grid[column]:.0f} Nm, '
+              f'95% band', 2)
 
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
