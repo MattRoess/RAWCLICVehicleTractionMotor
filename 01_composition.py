@@ -230,50 +230,13 @@ def main() -> int:
     if borrowed:
         print(f'  {borrowed} rows have a borrowed slope, flagged')
 
-    _rule('Written')
-    os.makedirs(params.output.data_dir, exist_ok=True)
-    os.makedirs(params.output.consolidated_dir, exist_ok=True)
-    os.makedirs(params.output.figures_dir, exist_ok=True)
-    out = os.path.join(params.output.data_dir, STEM)
-
-    # The CURRENT composition, in all three voltage classes. The corrected
-    # frame itself has no voltage dimension -- the source describes the 400 V
-    # fleet -- so the current dataset is the trajectory at the base year,
-    # which is where the variants are built.
-    current_year = series[series.productionYear == params.scenario.base_year]
-
-    corrected.to_csv(f'{out}.csv', index=False)
-    current_year.to_csv(f'{out}_current.csv', index=False)
-    series.to_csv(f'{out}_trajectory.csv', index=False)
-    grid.to_csv(f'{out}_by_torque.csv', index=False)
-
-    # THE FILE THE STOCK-AND-FLOW MODEL READS, and the only thing in
-    # `consolidated_dir` -- that folder is the whole interface to the other
-    # repository, which reads it where it lies rather than keeping a copy.
-    # Sheet name follows the house convention that 04_03 has used so far, so a
-    # rewritten consumer can keep it or not without this project having to
-    # guess.
-    export_path = os.path.join(params.output.consolidated_dir,
-                               'TractionMotor_for_stockandflow.xlsx')
-    with pd.ExcelWriter(export_path, engine='openpyxl') as writer:
-        export.to_excel(writer, sheet_name='Consolidated data', index=False)
-        declared().to_excel(writer, sheet_name='corrections', index=False)
-        after.to_excel(writer, sheet_name='findings', index=False)
-    export.to_csv(os.path.join(params.output.consolidated_dir,
-                               'TractionMotor_for_stockandflow.csv'), index=False)
-    with pd.ExcelWriter(f'{out}.xlsx', engine='openpyxl') as writer:
-        current_year.to_excel(writer, sheet_name='composition_current',
-                              index=False)
-        for volts in params.scenario.copper_mass:
-            block = current_year[current_year.voltageClass == volts]
-            block.to_excel(writer, sheet_name=f'current_{volts}V', index=False)
-        after.to_excel(writer, sheet_name='findings', index=False)
-        log.to_excel(writer, sheet_name='corrections', index=False)
-        declared().to_excel(writer, sheet_name='corrections_declared', index=False)
-        bench.to_excel(writer, sheet_name='benchmark_drexler2025', index=False)
     # THE ELEMENT LAYER. HANDOVER §7.2: no e-m rows anywhere, so Nd, Pr, Dy
     # and Tb could not be reported. They can now, for the magnet.
     _rule('Elements of the magnet')
+    # The output folders, made here because the element layer writes before the
+    # 'Written' section does and a fresh clone has neither.
+    os.makedirs(params.output.data_dir, exist_ok=True)
+    os.makedirs(params.output.consolidated_dir, exist_ok=True)
     em_rows, element_mass, fractions = element_layer(grid, draws_out, params)
     if not em_rows.empty:
         base = list(params.run.magnet_grade_scenarios)[0]
@@ -329,6 +292,57 @@ def main() -> int:
               f'rows, {len(written)} chemistry draw arrays, '
               f'{len(params.run.magnet_grade_scenarios)} grade scenarios')
 
+    _rule('Written')
+    os.makedirs(params.output.data_dir, exist_ok=True)
+    os.makedirs(params.output.consolidated_dir, exist_ok=True)
+    os.makedirs(params.output.figures_dir, exist_ok=True)
+    out = os.path.join(params.output.data_dir, STEM)
+
+    # The CURRENT composition, in all three voltage classes. The corrected
+    # frame itself has no voltage dimension -- the source describes the 400 V
+    # fleet -- so the current dataset is the trajectory at the base year,
+    # which is where the variants are built.
+    current_year = series[series.productionYear == params.scenario.base_year]
+
+    corrected.to_csv(f'{out}.csv', index=False)
+    current_year.to_csv(f'{out}_current.csv', index=False)
+    series.to_csv(f'{out}_trajectory.csv', index=False)
+    grid.to_csv(f'{out}_by_torque.csv', index=False)
+
+    # THE FILE THE STOCK-AND-FLOW MODEL READS, and the only thing in
+    # `consolidated_dir` -- that folder is the whole interface to the other
+    # repository, which reads it where it lies rather than keeping a copy.
+    # Sheet name follows the house convention that 04_03 has used so far, so a
+    # rewritten consumer can keep it or not without this project having to
+    # guess.
+    export_path = os.path.join(params.output.consolidated_dir,
+                               'TractionMotor_for_stockandflow.xlsx')
+    with pd.ExcelWriter(export_path, engine='openpyxl') as writer:
+        export.to_excel(writer, sheet_name='Consolidated data', index=False)
+        # ⚠️ THE ELEMENT LAYER TRAVELS WITH THE EXPORT, because
+        # `data/consolidated/` is the whole interface: a consumer that has to
+        # reach into `data/composition/` for the magnet's elements is reading
+        # this project's working files, and those are allowed to change.
+        # One row per grade scenario, motor type and element -- e-m, the
+        # element as a share of the magnet. The kilograms follow from the
+        # magnet mass in the main sheet, which is why they are not repeated
+        # here at 290,000 rows.
+        if not em_rows.empty:
+            em_rows.to_excel(writer, sheet_name='Magnet elements', index=False)
+        declared().to_excel(writer, sheet_name='corrections', index=False)
+        after.to_excel(writer, sheet_name='findings', index=False)
+    export.to_csv(os.path.join(params.output.consolidated_dir,
+                               'TractionMotor_for_stockandflow.csv'), index=False)
+    with pd.ExcelWriter(f'{out}.xlsx', engine='openpyxl') as writer:
+        current_year.to_excel(writer, sheet_name='composition_current',
+                              index=False)
+        for volts in params.scenario.copper_mass:
+            block = current_year[current_year.voltageClass == volts]
+            block.to_excel(writer, sheet_name=f'current_{volts}V', index=False)
+        after.to_excel(writer, sheet_name='findings', index=False)
+        log.to_excel(writer, sheet_name='corrections', index=False)
+        declared().to_excel(writer, sheet_name='corrections_declared', index=False)
+        bench.to_excel(writer, sheet_name='benchmark_drexler2025', index=False)
     # THE DISTRIBUTION ITSELF, not a summary of it.
     manifest = write_draws(draws_out, params, params.output.draws_dir)
     if not manifest.empty:
