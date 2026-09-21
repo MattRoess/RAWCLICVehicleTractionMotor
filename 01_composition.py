@@ -49,6 +49,7 @@ import pandas as pd                                        # noqa: E402
 
 from src.composition import (CITATION, apply_corrections,   # noqa: E402
                              composition_by_torque, export_stock_and_flow,
+                             write_draws,
                              figure_all_types,
                              figure_by_torque,
                              verify_by_torque,
@@ -193,7 +194,9 @@ def main() -> int:
               f'{params.scenario.base_voltage} V')
 
     _rule('Composition as a function of torque')
-    grid = composition_by_torque(corrected, params)
+    # The dict comes back holding the per-draw arrays -- see write_draws.
+    draws_out: dict = {}
+    grid = composition_by_torque(corrected, params, draws_out=draws_out)
     print(f'  {len(grid)} rows   '
           f'{grid.torque_nm.nunique()} torque points '
           f'{grid.torque_nm.min():.0f}-{grid.torque_nm.max():.0f} Nm   '
@@ -264,6 +267,14 @@ def main() -> int:
         log.to_excel(writer, sheet_name='corrections', index=False)
         declared().to_excel(writer, sheet_name='corrections_declared', index=False)
         bench.to_excel(writer, sheet_name='benchmark_drexler2025', index=False)
+    # THE DISTRIBUTION ITSELF, not a summary of it.
+    manifest = write_draws(draws_out, params, params.output.draws_dir)
+    if not manifest.empty:
+        print(f'  {params.output.draws_dir}: {len(manifest)} arrays, '
+              f'{manifest.draws.iloc[0]:,} draws x '
+              f'{manifest.torque_points.iloc[0]} torques, '
+              f'{manifest.mbytes.sum():.0f} MB')
+
     audit_path = os.path.join(params.output.data_dir, 'composition_audit.csv')
     pd.concat([before.assign(stage='before'),
                after.assign(stage='after')]).to_csv(audit_path, index=False)

@@ -50,6 +50,37 @@ traction motor information is in this project and nowhere else.
 |---|---|
 | `TractionMotor_for_stockandflow.xlsx` | what `04_03_tractionmotors.py` reads, 13 299 rows |
 | `TractionMotor_for_stockandflow.csv` | the same, for anything reading text |
+| `draws/` | **the 200 000 simulations themselves**, 31 arrays, 298 MB |
+
+### The draws, because a .csv is not a distribution
+
+Matthias 2026-09-21. Every number reported here is a percentile of an array of
+200 000 fitted values, and until now those arrays were built inside
+`composition_by_torque` and thrown away. They are written now, as
+`RAWCLICVehicleBattery` writes its own: `float32`, shape `(200 000, 12)`, one
+per motor type, component and material.
+
+| in `data/consolidated/draws/` | |
+|---|---|
+| `<motor>__<component>__<sub>__<material>__draws.npy` | the mass of every draw at every grid torque, **at base year and base voltage** |
+| `torque_grid.txt` | the 12 columns of every array |
+| `draw_scales.csv` | `scale` per motor, component, material, year and voltage class |
+| `draws_manifest.csv` | what each array is, its shape, the seed and the draw count |
+
+**Base year times a scale, not 39 copies.** The year factor is a closed-form
+curve and the voltage factor is three constants, so any year and any voltage
+class is `array * scale` — verified to 5.6 × 10⁻⁸ against 3 596 reported
+percentiles, which is `float32` rounding. Writing all 13 × 3 combinations would
+have been twelve gigabytes of the same numbers.
+
+**And the two spec machines now draw.** Their interval was
+`mean × (1 ± width)`, `width` the quadrature sum of the borrowed shape's
+relative width and `spec_share_uncertainty` — the percentile arithmetic §5 says
+never to do. Each draw now borrows that draw's own radial total, scaled through
+the anchor by that draw's own value there, and multiplies by a drawn share
+renormalised so the parts still sum to the machine the data sheet states. The
+three radial types are unchanged to the last bit; the spec means move under
+1 %, and the relative 95 % width goes from 0.548 to 0.503.
 
 ### And into `data/composition/`, for this project's own use
 

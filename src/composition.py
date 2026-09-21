@@ -26,6 +26,8 @@ one file to open to change how this runs.
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 
@@ -1886,7 +1888,8 @@ def figure_fleet(params, out_path: str) -> str:
 
 # ================================================= 8 COMPOSITION BY TORQUE
 # ======================================================================
-def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
+def composition_by_torque(frame: pd.DataFrame, params: Params,
+                          draws_out: dict | None = None) -> pd.DataFrame:
     """
     The composition as a function of TORQUE and YEAR, with no segment in it.
 
@@ -1909,6 +1912,17 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
     ⚠️ `n_segments` AND `torque_low`/`torque_high` TRAVEL WITH EVERY ROW. A
     grid point outside the range the fit was made on is an extrapolation, and
     the consumer has to be able to see that without re-deriving it.
+
+    ⚠️ `draws_out` KEEPS THE DISTRIBUTION, WHICH IS OTHERWISE LOST. Matthias
+    2026-09-21: a .csv of three percentiles is not a distribution, and the
+    200,000 simulations have to come out of this function. Pass a dict and it
+    is filled with `(motor, component, sub, materialClass) -> (draws, n_grid)`
+    float32, the fitted mass of every draw at every grid torque, BEFORE the
+    year and voltage factors -- both of those are deterministic scalars
+    (`factor()` and `scenario.copper_mass`), so any year and any voltage class
+    is `draws * scale` exactly, and storing 13 x 3 copies of the same numbers
+    would be thirty-nine times the bytes for no extra information. The scale
+    table is written beside the arrays.
     """
     from src.params_schema import years_wanted
 
@@ -2041,6 +2055,12 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
         high = np.percentile(fitted, 97.5, axis=0)
 
         motor, component, sub, material_key, klass = key
+        if draws_out is not None:
+            # float32 halves the bytes and keeps seven significant digits on a
+            # mass in kilograms -- far past what a bootstrap of eleven segments
+            # can support. The battery project persists its draws the same way.
+            draws_out[(motor, component, sub, klass)] = np.asarray(
+                fitted, dtype=np.float32)
         for volts, copper_factor in params.scenario.copper_mass.items():
             voltage_scale = (copper_factor
                              if (klass == 'copper' and component == 'stator')
@@ -2074,13 +2094,56 @@ def composition_by_torque(frame: pd.DataFrame, params: Params) -> pd.DataFrame:
                     })
 
     result = pd.DataFrame(rows)
-    spec = _spec_by_torque(result, params)
+    spec = _spec_by_torque(result, params, draws_out=draws_out)
     if not spec.empty:
         result = pd.concat([result, spec], ignore_index=True)
     return result
 
 
-def _spec_by_torque(radial: pd.DataFrame, params: Params) -> pd.DataFrame:
+def _radial_total_draws(draws_out: dict | None, grid, slope) -> np.ndarray | None:
+    """
+    The radial PMSM machine's total mass per draw, (draws, n_grid), or None.
+
+    The shape the spec machines borrow. Summed across every component and
+    material of `PMElectricMotors`, per draw, so the total carries the draws'
+    own correlation rather than a sum of independent intervals.
+    """
+    if draws_out is None or slope != 'radial':
+        return None
+    parts = [array for (motor, _c, _s, _k), array in draws_out.items()
+             if motor == 'PMElectricMotors']
+    if not parts:
+        return None
+    total = np.zeros_like(parts[0], dtype=np.float64)
+    for array in parts:
+        total += array
+    return total
+
+
+def _interp_draws(values: np.ndarray, grid, at: float) -> np.ndarray:
+    """
+    Linear interpolation at one torque, for every draw at once.
+
+    `np.interp` would have to be called per draw. The grid is the same for all
+    of them, so the bracketing pair and the weight are found once and applied
+    as a single linear combination of two columns. Outside the grid it clamps
+    to the end value, which is what `np.interp` does -- and which matters here:
+    the DeepDrive anchor is 1500 Nm and the grid stops at 1200.
+    """
+    grid = np.asarray(grid, dtype=float)
+    if at <= grid[0]:
+        return values[:, 0].astype(np.float64)
+    if at >= grid[-1]:
+        return values[:, -1].astype(np.float64)
+    upper = int(np.searchsorted(grid, at))
+    lower = upper - 1
+    weight = (at - grid[lower]) / (grid[upper] - grid[lower])
+    return ((1.0 - weight) * values[:, lower] +
+            weight * values[:, upper]).astype(np.float64)
+
+
+def _spec_by_torque(radial: pd.DataFrame, params: Params,
+                    draws_out: dict | None = None) -> pd.DataFrame:
     """
     The newer machines on the same grid, from a data sheet and a split.
 
@@ -2096,6 +2159,20 @@ def _spec_by_torque(radial: pd.DataFrame, params: Params) -> pd.DataFrame:
     new intercept, which produced a negative mass below 130 Nm when it was
     tried on the topology figure. Scaling keeps the shape and cannot go
     negative.
+
+    ⚠️ DRAWN, NOT SHIFTED, SINCE 2026-09-21. This function used to build its
+    interval as mean x (1 +/- width) with width the quadrature sum of the
+    borrowed shape's relative width and `spec_share_uncertainty`. That is the
+    percentile arithmetic `monte_carlo` forbids in as many words: "a percentile
+    is a property of a distribution, and arithmetic on two percentiles is not
+    the percentile of the result". With `draws_out` holding the radial
+    machines' own draws, both parts are now DRAWN and multiplied per draw --
+    the shape is the radial total of that draw, the share is drawn around the
+    declared value -- so they combine by construction and the quadrature is
+    gone. The reported percentiles are percentiles of those draws.
+
+    Without `draws_out` the old analytic width is still used, so the function
+    keeps working for any caller that does not want the arrays.
     """
     from src.params_schema import years_wanted
 
@@ -2135,25 +2212,89 @@ def _spec_by_torque(radial: pd.DataFrame, params: Params) -> pd.DataFrame:
         # number, so there is no published interval -- which is not the same
         # as no uncertainty. These are the least certain numbers here.
         #
-        # Two parts, combined in quadrature. The borrowed SHAPE inherits the
-        # radial fit's own relative width at that torque, which already grows
-        # away from the radial data. The derived SHARES carry
-        # spec_share_uncertainty. Neither is measured, and both are declared.
-        radial_band = radial_total.groupby('torque_nm')[['meanValue', 'p025',
-                                                         'p975']].sum()
-        shape_rel = np.interp(
-            grid, radial_band.index,
-            ((radial_band.p975 - radial_band.p025) /
-             (2 * radial_band.meanValue)).values)
-        width = np.sqrt(shape_rel ** 2 +
-                        params.run.spec_share_uncertainty ** 2)
+        # Two parts. The borrowed SHAPE inherits the radial fit's own
+        # uncertainty at that torque, which already grows away from the radial
+        # data. The derived SHARES carry `spec_share_uncertainty`. Neither is
+        # measured, and both are declared.
+        total_draws = _radial_total_draws(draws_out, grid, slope)
+        if total_draws is not None:
+            # DRAWN. The shape is this draw's own radial total, scaled through
+            # the anchor by this draw's own value at the anchor torque, so a
+            # draw with a heavy radial machine gets a heavy axial one -- the
+            # borrowed shape and its uncertainty travel together.
+            at_anchor_draws = _interp_draws(total_draws, grid, anchor_torque)
+            safe = at_anchor_draws > 0
+            totals_draws = np.zeros_like(total_draws)
+            totals_draws[safe] = (total_draws[safe] *
+                                  (anchor_mass / at_anchor_draws[safe])[:, None])
+            width = None
+        else:
+            totals_draws = None
+            radial_band = radial_total.groupby('torque_nm')[['meanValue', 'p025',
+                                                             'p975']].sum()
+            shape_rel = np.interp(
+                grid, radial_band.index,
+                ((radial_band.p975 - radial_band.p025) /
+                 (2 * radial_band.meanValue)).values)
+            width = np.sqrt(shape_rel ** 2 +
+                            params.run.spec_share_uncertainty ** 2)
+
+        # THE SHARES, DRAWN AND RENORMALISED PER DRAW. `spec_share_uncertainty`
+        # is a 95% relative half-width -- "a share could be a quarter out
+        # either way" -- so sigma is share * u / 1.96, the same reading the
+        # quadrature version had.
+        #
+        # ⚠️ RENORMALISED, BECAUSE THE TOTAL IS THE ONE THING THAT IS KNOWN.
+        # The data sheet states the whole-machine mass; what is uncertain is
+        # how it splits. Drawing five shares independently would let the parts
+        # sum to something other than the machine, so each draw's shares are
+        # divided by their own sum. That also makes them negatively correlated,
+        # which is what a composition on a simplex actually is.
+        share_draws = None
+        if totals_draws is not None:
+            classes = list(entry['shares'])
+            rng_spec = np.random.default_rng(
+                params.monte_carlo.seed + abs(hash(motor)) % 100_000)
+            drawn = np.stack([
+                rng_spec.normal(entry['shares'][klass],
+                                entry['shares'][klass] *
+                                params.run.spec_share_uncertainty / 1.96,
+                                totals_draws.shape[0])
+                for klass in classes], axis=1)
+            np.clip(drawn, 0.0, None, out=drawn)
+            row_sums = drawn.sum(axis=1, keepdims=True)
+            row_sums[row_sums == 0] = 1.0
+            share_draws = dict(zip(classes, (drawn / row_sums).T))
 
         for klass, share in entry['shares'].items():
+            # The material's own mass per draw, at base year and base voltage:
+            # this draw's machine total times this draw's share. The year and
+            # the voltage are deterministic scalars applied after, exactly as
+            # for the radial machines, so this is the array worth keeping.
+            klass_draws = None
+            if totals_draws is not None and share_draws is not None:
+                klass_draws = totals_draws * share_draws[klass][:, None]
+                if draws_out is not None:
+                    draws_out[(motor, None, None, klass)] = np.asarray(
+                        klass_draws, dtype=np.float32)
+                median = np.median(klass_draws, axis=0)
+                low = np.percentile(klass_draws, 2.5, axis=0)
+                high = np.percentile(klass_draws, 97.5, axis=0)
+
             for volts, copper_factor in params.scenario.copper_mass.items():
                 voltage_scale = copper_factor if klass == 'copper' else 1.0
                 for year in years:
-                    scale = factor(year, klass, params) * voltage_scale * share
+                    year_voltage = factor(year, klass, params) * voltage_scale
+                    scale = year_voltage * share
                     for index, torque in enumerate(grid):
+                        if klass_draws is not None:
+                            centre = median[index] * year_voltage
+                            lower = low[index] * year_voltage
+                            upper = high[index] * year_voltage
+                        else:
+                            centre = totals[index] * scale
+                            lower = centre * (1 - width[index])
+                            upper = centre * (1 + width[index])
                         rows.append({
                             'componentKeyLevel1': motor,
                             # ⚠️ NO COMPONENT LEVEL. A data sheet gives a
@@ -2167,9 +2308,9 @@ def _spec_by_torque(radial: pd.DataFrame, params: Params) -> pd.DataFrame:
                             'torque_nm': torque,
                             'productionYear': year,
                             'voltageClass': volts,
-                            'meanValue': totals[index] * scale,
-                            'p025': totals[index] * scale * (1 - width[index]),
-                            'p975': totals[index] * scale * (1 + width[index]),
+                            'meanValue': max(0.0, centre),
+                            'p025': max(0.0, lower),
+                            'p975': max(0.0, upper),
                             'yearBasis': ('measured'
                                           if params.data.year_is_measured(year)
                                           else ('backcast'
@@ -2184,6 +2325,111 @@ def _spec_by_torque(radial: pd.DataFrame, params: Params) -> pd.DataFrame:
                                      f'run.spec_composition',
                         })
     return pd.DataFrame(rows)
+
+
+def write_draws(draws_out: dict, params: Params, directory: str) -> pd.DataFrame:
+    """
+    Write the 200,000 simulations to disk, and the table that reads them.
+
+    ⚠️ A CSV OF THREE PERCENTILES IS NOT A DISTRIBUTION. Matthias 2026-09-21.
+    Every number this project reports is a percentile of an array that existed
+    for a moment inside `composition_by_torque` and was then thrown away. This
+    writes the arrays themselves, the way `RAWCLICVehicleBattery` does, so that
+    anything downstream can run its own Monte Carlo against the real shape
+    instead of re-inventing one from a mean and an interval.
+
+    WHAT IS WRITTEN, into `directory`:
+
+        <motor>__<component>__<material>__draws.npy
+                        (draws, n_torque) float32 -- the mass of every draw at
+                        every grid torque, AT BASE YEAR AND BASE VOLTAGE
+        torque_grid.txt one torque per line, the columns of every array
+        draw_scales.csv motor, component, materialClass, productionYear,
+                        voltageClass, scale -- multiply a column by `scale`
+        draws_manifest.csv  one row per array: what is in it, its shape, and
+                        the seed and draw count that produced it
+
+    ⚠️ BASE YEAR AND BASE VOLTAGE, TIMES A SCALE. The year factor and the
+    voltage factor are deterministic -- `factor()` is a closed-form curve and
+    `scenario.copper_mass` is three constants -- so the distribution for any
+    year and any voltage class is the base array times one number. Writing all
+    13 x 3 combinations would be thirty-nine copies of the same draws and about
+    12 GB for no information. `draw_scales.csv` holds every scale, so nothing
+    has to be recomputed to use them.
+
+        mass_draws(motor, component, material, year, volts) =
+            load(file) * scale[motor, component, material, year, volts]
+    """
+    os.makedirs(directory, exist_ok=True)
+    from src.params_schema import years_wanted
+
+    grid = years_wanted(params.run.torque_grid)
+    years = years_wanted(params.run.years)
+
+    with open(os.path.join(directory, 'torque_grid.txt'), 'w') as handle:
+        handle.write('\n'.join(str(int(torque)) for torque in grid) + '\n')
+
+    def _named(part, absent: str) -> str:
+        """A key part as a filename piece. NaN and None both mean absent.
+
+        `groupby(dropna=False)` yields NaN where a level is empty, not None, so
+        both have to be caught -- a spec machine has no component at all, and a
+        radial component may have no sub-component.
+        """
+        if part is None or (isinstance(part, float) and np.isnan(part)):
+            return absent
+        return str(part)
+
+    manifest, scales = [], []
+    for (motor, component, sub, klass), array in sorted(
+            draws_out.items(), key=lambda item: tuple(str(part) for part in item[0])):
+        name = '__'.join([_named(motor, 'motor'), _named(component, 'whole'),
+                          _named(sub, 'all'), _named(klass, 'material')])
+        path = os.path.join(directory, f'{name}__draws.npy')
+        np.save(path, array)
+        manifest.append({
+            'file': os.path.basename(path),
+            'componentKeyLevel1': motor,
+            'componentKeyLevel2': component,
+            'componentKeyLevel3': sub,
+            'materialClass': klass,
+            'draws': array.shape[0],
+            'torque_points': array.shape[1],
+            'dtype': str(array.dtype),
+            'mbytes': round(array.nbytes / 1e6, 1),
+            'basis': f'base year {params.scenario.base_year}, '
+                     f'{params.scenario.base_voltage} V, before year and '
+                     f'voltage scaling',
+            'seed': params.monte_carlo.seed,
+        })
+        # The copper of a stator is the only thing the voltage class touches on
+        # a radial machine; on a spec machine the split has no component, so it
+        # is the copper share itself. Both are as the row builders do it.
+        for volts, copper_factor in params.scenario.copper_mass.items():
+            has_component = _named(component, '') != ''
+            if klass != 'copper':
+                voltage_scale = 1.0
+            elif not has_component:
+                voltage_scale = copper_factor
+            else:
+                voltage_scale = copper_factor if component == 'stator' else 1.0
+            for year in years:
+                scales.append({
+                    'file': os.path.basename(path),
+                    'componentKeyLevel1': motor,
+                    'componentKeyLevel2': component,
+                    'componentKeyLevel3': sub,
+                    'materialClass': klass,
+                    'productionYear': year,
+                    'voltageClass': volts,
+                    'scale': factor(year, klass, params) * voltage_scale,
+                })
+
+    manifest = pd.DataFrame(manifest)
+    manifest.to_csv(os.path.join(directory, 'draws_manifest.csv'), index=False)
+    pd.DataFrame(scales).to_csv(os.path.join(directory, 'draw_scales.csv'),
+                                index=False)
+    return manifest
 
 
 def verify_by_torque(grid: pd.DataFrame, corrected: pd.DataFrame,

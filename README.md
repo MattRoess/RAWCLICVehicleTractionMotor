@@ -49,6 +49,7 @@ model and holds nothing else:
 |---|---|
 | `TractionMotor_for_stockandflow.xlsx` | what `04_03_tractionmotors.py` reads, 13 299 rows, house schema |
 | `TractionMotor_for_stockandflow.csv` | the same, for anything reading text |
+| `draws/` | the 200 000 simulations: 31 `float32` `(200000, 12)` arrays, the torque grid, the year/voltage scale table and a manifest. A `.csv` of three percentiles is not a distribution -- see `HANDOVER.md`. |
 
 Into `data/composition/`, for this project's own use:
 

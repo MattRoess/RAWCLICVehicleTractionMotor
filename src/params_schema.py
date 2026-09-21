@@ -881,6 +881,20 @@ class OutputParams:
     # to move with it.
     consolidated_dir: str = os.path.join('data', 'consolidated')
 
+    # ⚠️ THE 200,000 SIMULATIONS THEMSELVES. Matthias 2026-09-21: a .csv is no
+    # distribution, and the full distribution from 200,000 simulations has to
+    # be on disk. This is where the arrays go -- one float32 (draws, torque)
+    # array per motor type, component and material, plus the scale table that
+    # turns a base-year array into any year and voltage class.
+    #
+    # Under `consolidated/` because it is an interface, not a working file:
+    # anything running its own Monte Carlo downstream reads these instead of
+    # re-inventing a distribution from a mean and an interval. Same arrangement
+    # as `RAWCLICVehicleBattery/data/consolidated`, which persists its draws as
+    # (200000, n) float32 for exactly this reason.
+    # SAFE TO CHANGE: yes, but the consumer has to be told.
+    draws_dir: str = os.path.join('data', 'consolidated', 'draws')
+
     # SAFE TO CHANGE: yes.
     figures_dir: str = 'figures'
 
