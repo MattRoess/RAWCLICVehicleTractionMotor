@@ -1381,11 +1381,11 @@ MATERIAL_COLOUR = {
     'aluminium': '#16A085',
 }
 MATERIAL_LABEL = {
-    'lamination': 'Elektroblech (Blechpaket)',
-    'copper': 'Kupfer',
+    'lamination': 'Electrical steel (lamination stack)',
+    'copper': 'Copper',
     'magnet': 'Magnet (NdFeB)',
-    'steel': 'Stahl (Welle, Getriebe)',
-    'aluminium': 'Aluminium (Gehäuse, Kühlung)',
+    'steel': 'Steel (shaft, gearbox)',
+    'aluminium': 'Aluminium (housing, cooling)',
 }
 
 
@@ -1442,12 +1442,12 @@ def figure_factors(params, out_path: str, current: pd.DataFrame = None) -> str:
         raise ValueError('figure_factors needs the current composition')
 
     columns = [
-        ('Stator-Blechpaket', 'lamination',
+        ('Stator lamination stack', 'lamination',
          lambda f: f.componentKeyLevel3 == 'statorSheetLaminationStack'),
-        ('Stator-Wicklung (Kupfer)', 'copper',
+        ('Stator winding (copper)', 'copper',
          lambda f: ((f.componentKeyLevel2 == 'stator') &
                     (f.componentKeyLevel3 == 'windings'))),
-        ('Rotor-Blechpaket', 'lamination',
+        ('Rotor lamination stack', 'lamination',
          lambda f: f.componentKeyLevel3 == 'rotorSheetLaminationStack'),
     ]
     show_years = [params.scenario.base_year, 2030, 2050, 2070]
@@ -1507,7 +1507,7 @@ def figure_factors(params, out_path: str, current: pd.DataFrame = None) -> str:
             # states the MASS AT A REFERENCE TORQUE, which is comparable
             # whatever shape the fit has.
             at_reference = intercept + slope * REFERENCE_TORQUE
-            axis.annotate(f'{at_reference:.1f} kg bei {REFERENCE_TORQUE:.0f} Nm',
+            axis.annotate(f'{at_reference:.1f} kg at {REFERENCE_TORQUE:.0f} Nm',
                           xy=(0.04, 0.93), xycoords='axes fraction',
                           fontsize=9, color=colour, va='top', weight='bold')
             axis.annotate(f'Fit: {slope * 1000:.1f} g/Nm'
@@ -1538,9 +1538,9 @@ def figure_factors(params, out_path: str, current: pd.DataFrame = None) -> str:
                   bbox_to_anchor=(0.5, -0.008))
     figure.suptitle('Mass against torque, by motor type and year \u2014 '
                     'same torque, less material.\n'
-                    'Vergleichbar ist der rote Stern: Masse bei 500 Nm. '
-                    'Die Fit-Koeffizienten sind es NICHT \u2014 '
-                    'IM ist durch den Ursprung gefittet (n=3).', fontsize=11.5)
+                    'Comparable is the red star: mass at 500 Nm. The fit '
+                    'coefficients are NOT \u2014 '
+                    'IM is fitted through the origin (n=3).', fontsize=11.5)
     figure.tight_layout(rect=(0, 0.045, 1, 1))
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
@@ -1602,7 +1602,7 @@ def figure_motor_mass(frame: pd.DataFrame, params, out_path: str) -> str:
             if 'reliability' in block.columns else block.iloc[0:0]
         title = MOTOR_LABEL.get(motor, motor)
         if not unreliable.empty:
-            title += '\n⚠ enthält eine als unsicher markierte Masse'
+            title += '\n⚠ contains a mass flagged as unreliable'
         axis.set_title(title, fontsize=10.5)
         axis.set_xlabel('Year')
         axis.grid(alpha=0.22, lw=0.6)
@@ -1613,8 +1613,8 @@ def figure_motor_mass(frame: pd.DataFrame, params, out_path: str) -> str:
                   frameon=False, bbox_to_anchor=(0.5, -0.012))
     figure.suptitle(
         f'Composition by motor type over time, segment {segment}, '
-        f'{params.scenario.base_voltage} V \u2014 Eingang für das '
-        f'Stock-and-Flow-Modell\n'
+        f'{params.scenario.base_voltage} V \u2014 input for the '
+        f'stock-and-flow model\n'
         'Only 2020 is measured; everything after it follows scenario.floor and '
         'scenario.initial_rate', fontsize=11.5)
     figure.tight_layout(rect=(0, 0.055, 1, 1))
@@ -1812,18 +1812,18 @@ def figure_topologies(current: pd.DataFrame, params, out_path: str) -> str:
         axis.legend(fontsize=8.5, framealpha=0.95, loc='upper left')
 
     axes[0].set_xlim(0, limit * 1.05)
-    axes[0].set_title(f'Bereich der Datenbasis, bis {limit:.0f} Nm',
+    axes[0].set_title(f'Range of the data, up to {limit:.0f} Nm',
                       fontsize=11.5)
     axes[1].set_xlim(0, 4600)
     axes[1].axvspan(limit, 4600, color='#000000', alpha=0.05, lw=0)
-    axes[1].set_title('Gesamtbild \u2014 grau: jenseits der Datenbasis',
+    axes[1].set_title('Whole picture \u2014 grey: beyond the data',
                       fontsize=11.5)
 
     figure.suptitle(
-        'Alle Maschinen mit veröffentlichter Masse, gegen Wellendrehmoment.  '
+        'Every machine with a published mass, against shaft torque.  '
         'Gearbox excluded throughout.\n'
         'Bands: 95% from Monte Carlo draws, regression refitted on every draw '
-        'gefittet.  Herstellerpunkte haben keine angegebene Unsicherheit.',
+        '.  Manufacturer points carry no stated uncertainty.',
         fontsize=11.5)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
@@ -1877,7 +1877,7 @@ def figure_fleet(params, out_path: str) -> str:
     axes[1].set_title('Power per motor: slightly rising, not everywhere',
                       fontsize=11.5)
     figure.suptitle(
-        'Was die Flotte von ihren Motoren verlangt, EV Database, 1438 Modelle\n'
+        'What the fleet asks of its motors, EV Database, 1438 models\n'
         'Median per segment, only where at least 5 models carry the year',
         fontsize=12)
     figure.tight_layout()
@@ -3201,7 +3201,7 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
                        base.groupby('torque_nm').meanValue.sum()).reindex(
                            [500.0]).iloc[0])
         axis.set_title(f'{MATERIAL_LABEL[klass].split(" (")[0]}\n'
-                       f'\u00b1{width / 2:.0%} bei 500 Nm', fontsize=10)
+                       f'\u00b1{width / 2:.0%} at 500 Nm', fontsize=10)
         axis.set_xlabel('Torque [Nm]')
         axis.set_ylim(bottom=0)
         axis.grid(alpha=0.22, lw=0.6)
@@ -3213,9 +3213,9 @@ def figure_by_torque(grid: pd.DataFrame, params, out_path: str,
     figure.suptitle(
         f'Mass per material against torque \u2014 '
         f'{MOTOR_LABEL.get(motor, motor)}, {params.scenario.base_voltage} V.  '
-        'Kein Segment.\n'
-        'Band: Unsicherheit DES FITS (Bootstrap der Segmente), nur 2020.  '
-        'Punkte: Segmentwerte mit der angegebenen Massenunsicherheit',
+        'No segment.\n'
+        'Band: uncertainty OF THE FIT (bootstrap of the segments), 2020 only.  '
+        'Points: segment values with their stated mass uncertainty',
         fontsize=11)
     figure.tight_layout(rect=(0, 0.07, 1, 1))
     figure.savefig(out_path, dpi=160)
@@ -3304,10 +3304,10 @@ def figure_all_types(grid: pd.DataFrame, params, out_path: str,
     axes[0].set_ylabel('Mass per vehicle [kg]')
     figure.suptitle(
         'All five motor types: mass against torque, '
-        f'{params.scenario.base_voltage} V, kein Segment.\n'
+        f'{params.scenario.base_voltage} V, no segment.\n'
         f'Bands: 95% from {params.monte_carlo.draws:,} Monte Carlo draws.  '
         'Blue: fitted from segments.  Orange: from ONE data sheet, '
-        'Stern = die Maschine', fontsize=11)
+        'star = the machine itself', fontsize=11)
     figure.tight_layout()
     figure.savefig(out_path, dpi=160)
     plt.close(figure)
