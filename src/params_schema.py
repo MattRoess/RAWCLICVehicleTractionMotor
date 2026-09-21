@@ -241,6 +241,25 @@ class DataParams:
     # SAFE TO CHANGE: yes.
     primary: str = 'zenodo'
 
+    # ⚠️ WHICH READERS ACTUALLY DESCRIBE A COMPOSITION, as opposed to being
+    # entitled to supply a year.
+    #
+    #   'house'    the consolidated dataset: kilograms per material. Yes.
+    #   'drexler'  46 benchmarked machines, component statistics. Yes.
+    #   'fleet'    the EV Database: power, torque, segment, drive. It says how
+    #              big the machine has to be, never what it is made of.
+    #   'spec'     a data sheet's whole-machine mass. A total, not a split --
+    #              the split comes from `run.spec_composition`, which is ours.
+    #   'bom'      verification only, and refused by the data path in code.
+    #
+    # THE DISTINCTION EARNED ITS PLACE. The run's closing warning counted every
+    # year any data source covered, so with the EV Database spanning 2011-2026
+    # it announced sixteen measured years out of sixty-one -- for a composition
+    # with ONE vintage. It overstated the evidence by fifteen years in the one
+    # line meant to stop exactly that.
+    # SAFE TO CHANGE: yes, when a new reader supplies composition.
+    composition_readers: tuple[str, ...] = ('house', 'drexler')
+
     # ⚠️ THE ELEMENT LAYER'S SOURCE, declared here like every other. Matthias's
     # own material-element definitions, copied from RAWCLICVehicleElectronics on
     # 2026-09-21 and extended with the grade-class temperature that project did
@@ -419,8 +438,23 @@ class DataParams:
         return max(windows) if windows else 0
 
     def year_is_measured(self, year: int) -> bool:
-        """Whether any data source is entitled to supply that year."""
+        """
+        Whether any data source is entitled to supply that year.
+
+        ⚠️ THIS IS NOT "THE COMPOSITION WAS MEASURED IN THAT YEAR", and the two
+        were confused in the run's closing warning until 2026-09-21. The EV
+        Database covers 2011-2026 and supplies TORQUE RANGES; it has never said
+        what a motor is made of. Counting its years as measured made the
+        warning claim sixteen measured years out of sixty-one where the
+        composition has one vintage. Use `year_has_composition` for that
+        question.
+        """
         return bool(self.covering(year, 'data'))
+
+    def year_has_composition(self, year: int) -> bool:
+        """Whether a source that describes COMPOSITION covers that year."""
+        return any(entry.get('reads') in self.composition_readers
+                   for entry in self.covering(year, 'data').values())
 
 
 @dataclass

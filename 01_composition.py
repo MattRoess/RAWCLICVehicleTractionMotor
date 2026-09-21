@@ -380,11 +380,28 @@ def main() -> int:
     for path in made:
         print(f'  {path}')
 
-    measured = [y for y in years if params.data.year_is_measured(y)]
-    print(f'\n  ⚠️  {len(measured)} of {len(years)} years is measured '
-          f'({", ".join(map(str, measured)) or "none"}).\n'
-          f'      Everything else is scenario.floor and '
-          f'scenario.initial_rate, not data.')
+    # ⚠️ COMPOSITION VINTAGES, NOT COVERED YEARS. This line used to count every
+    # year any data source was entitled to supply, which included the EV
+    # Database's 2011-2026 -- and that source gives torque, never what a motor
+    # is made of. It announced sixteen measured years where there is one
+    # composition vintage.
+    described = [y for y in years if params.data.year_has_composition(y)]
+    primary = params.data.sources[params.data.primary]
+    base = [y for y in years
+            if primary['covers'][0] <= y <= primary['covers'][1]]
+    print(f'\n  ⚠️  {len(base)} of {len(years)} years has a MEASURED '
+          f'COMPOSITION ({", ".join(map(str, base)) or "none"}), from '
+          f'{params.data.primary}.')
+    if len(described) > len(base):
+        others = [y for y in described if y not in base]
+        print(f'      {len(described)} are covered by any composition source '
+              f'({others[0]}-{others[-1]} adds {", ".join(sorted(set(
+                  name for y in others
+                  for name, e in params.data.covering(y, "data").items()
+                  if e.get("reads") in params.data.composition_readers
+                  and name != params.data.primary)))}).')
+    print(f'      Every other year is scenario.floor and '
+          f'scenario.initial_rate -- constructed, not data.')
     return 0
 
 
