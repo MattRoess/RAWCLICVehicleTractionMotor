@@ -270,11 +270,20 @@ class DataParams:
     # e-m rows anywhere, Nd, Pr, Dy and Tb cannot be reported" -- is what this
     # closes.
     #
-    # The workbook also carries ElectricalSteel, Copper, CastAl and CastFeSteel,
-    # so the other four materials can have an element layer the same way. Only
-    # the magnet is built today, because only the magnet was asked for and
-    # because it is the one whose elements are under export control.
-    # SAFE TO CHANGE: yes.
+    # ⚠️ THE MAGNET ONLY, AND THAT IS A DECISION. Matthias 2026-09-21: "At the
+    # moment we keep it on the material level except for NdFeB." The workbook
+    # also carries ElectricalSteel, Copper, CastAl and CastFeSteel, so lamination,
+    # copper, aluminium and steel COULD be resolved to elements the same way --
+    # silicon in the electrical steel, the full Cu and Al chemistry. They are
+    # deliberately not, and the reason is that nothing downstream asks for them:
+    # the magnet's elements are the ones under export control and the ones the
+    # recovery model reads. Adding the other four would quadruple the element
+    # rows to report silicon nobody has asked about.
+    #
+    # So `lamination`, `copper`, `steel` and `aluminium` stop at the material
+    # level, on purpose, and that is not an omission to be tidied up later
+    # without asking. SAFE TO CHANGE: yes, and the workbook already has what it
+    # would take.
     composition_file: str = os.path.join('data', 'raw',
                                          '10_MaterialElementDefinitions.xlsx')
     composition_sheet: str = 'PermanentMagnetNdFeB'
