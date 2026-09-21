@@ -85,10 +85,18 @@ class DataParams:
     #  material becomes available to the whole project by being declared.
     #
     #  Each entry:
-    #    file      path from the project root. **BLANK MEANS DECLARED BUT
-    #              NOT YET IN HAND** -- the source is known, the file is not
-    #              here. That is not an error; it is the honest state of a
-    #              source we have found and not yet obtained.
+    #    file      path from the project root, and **A FILE THIS CODE OPENS
+    #              LIVES IN `data/raw/`** -- Matthias 2026-09-21. That is the
+    #              whole difference between the two places a source can sit:
+    #              `data/raw/` is read by a reader in this file's registry,
+    #              `documentation/` is read by a person and transcribed. The
+    #              Drexler PDF is declared here and never opened, which is why
+    #              it stays a document; the Zenodo workbook is opened on every
+    #              run, which is why it does not.
+    #              **BLANK MEANS DECLARED BUT NOT YET IN HAND** -- the source
+    #              is known, the file is not here. That is not an error; it is
+    #              the honest state of a source we have found and not yet
+    #              obtained.
     #    sheet     worksheet, where it matters.
     #    role      'data'         may supply values into the dataset
     #              'verification' may ONLY be compared against it
@@ -124,8 +132,7 @@ class DataParams:
         # project exists to deny. It anchors the historic end of the
         # trajectory and supplies no year after 2020.
         'zenodo': dict(
-            file='documentation/TractionMotor/Zenodo/'
-                 'RAWCLIC_BEV_motor_consolidated_data_V1.xlsx',
+            file='data/raw/RAWCLIC_BEV_motor_consolidated_data_V1.xlsx',
             sheet='consolidated_data',
             role='data', tier='tier1', vintage=2020, published=2026,
             # ONE VINTAGE, so one year. `productionYear` holds a single
@@ -177,7 +184,7 @@ class DataParams:
         # segment and per year, and therefore where the regressions are
         # interpolating and where they are inventing.
         'evdatabase': dict(
-            file='data/EV_details.csv',
+            file='data/raw/EV_details.csv',
             sheet='',
             role='data', tier='tier2', vintage=2026, published=2026,
             covers=(2011, 2026), horizon='historic',
@@ -839,9 +846,25 @@ class OutputParams:
     """Where what this project produces is written."""
 
     # WHAT THE STAGES WRITE. Not `documentation/`, which holds what was
-    # received and what is written about it.
+    # received and what is written about it, and not `data/raw/`, which holds
+    # what they read.
     # SAFE TO CHANGE: yes.
     data_dir: str = 'data'
+
+    # ⚠️ THE ONE FOLDER ANOTHER PROJECT READS. Matthias 2026-09-21: traction
+    # motor information lives here and nowhere else, so the stock-and-flow
+    # model is pointed at this folder rather than handed a copy of the
+    # workbook to keep beside its own inputs. Same shape as
+    # `RAWCLICVehicleBattery/data/consolidated`, which it already reads that
+    # way.
+    #
+    # NOTHING ELSE GOES IN HERE. Everything this project writes for its own
+    # use -- the trajectory, the audit, the corrections -- stays in
+    # `data_dir`, so that what another repository depends on is exactly the
+    # two files in this folder and can be changed deliberately.
+    # SAFE TO CHANGE: yes, but the consumer's `traction_composition_dir` has
+    # to move with it.
+    consolidated_dir: str = os.path.join('data', 'consolidated')
 
     # SAFE TO CHANGE: yes.
     figures_dir: str = 'figures'

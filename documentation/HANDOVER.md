@@ -20,7 +20,28 @@ corrects and writes in one run. `src/composition.py` holds the benchmark, the
 audit, the corrections, the draws and the figures. **Every setting is in
 `src/params_schema.py`** — nothing takes a command-line argument.
 
-### What it writes, into `data/`
+### Where the files are, since 2026-09-21
+
+**A file this code opens lives in `data/raw/`** — the Zenodo consolidated
+workbook and the EV Database snapshot, and nothing else. `documentation/` holds
+what a person reads and transcribes: the Drexler paper, the reports, the
+critical review. Matthias's rule, and the reason the Drexler PDF stays a
+document while the Zenodo workbook did not.
+
+### What it writes, into `data/consolidated/`
+
+The whole interface to the stock-and-flow model, and it holds nothing else.
+`RAWCLICStockAndFlow` reads it **where it lies**, through
+`params.materials.traction_composition_dir`, the same arrangement it already
+had with `RAWCLICVehicleBattery/data/consolidated`. No copy is kept there:
+traction motor information is in this project and nowhere else.
+
+| file | |
+|---|---|
+| `TractionMotor_for_stockandflow.xlsx` | what `04_03_tractionmotors.py` reads, 13 299 rows |
+| `TractionMotor_for_stockandflow.csv` | the same, for anything reading text |
+
+### And into `data/`, for this project's own use
 
 | file | |
 |---|---|

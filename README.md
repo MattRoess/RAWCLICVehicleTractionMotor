@@ -36,31 +36,44 @@ the figures. Auditing and correcting are one argument, not two tasks.
 
 ### What it writes, into `data/`
 
+Into `data/consolidated/`, which is the whole interface to the stock-and-flow
+model and holds nothing else:
+
+| file | |
+|---|---|
+| `TractionMotor_for_stockandflow.xlsx` | what `04_03_tractionmotors.py` reads, 13 299 rows, house schema |
+| `TractionMotor_for_stockandflow.csv` | the same, for anything reading text |
+
+Into `data/`, for this project's own use:
+
 | file | |
 |---|---|
 | `TractionMotor_composition_by_torque.csv` | **the deliverable.** 14 508 rows, no segment dimension |
-| `TractionMotor_for_stockandflow.xlsx` / `.csv` | the same in the house schema, for the stock-and-flow model |
 | `TractionMotor_composition_trajectory.csv` | by segment, 13 338 rows |
 | `TractionMotor_composition.xlsx` | current composition, 8 sheets, house schema |
 | `composition_audit.csv` | every finding, before and after correction |
 
 Plus seven figures in `figures/`.
 
-⚠️ **The handover to the stock-and-flow model is not wired up yet.**
-`04_03_tractionmotors.py` reads
-`params.materials.traction_composition_file_name`, still
-`20260309-Traction_motors_consolidated.xlsx`, and no traction file has been
-placed in that project's `data/raw/`. The export exists here; the filename and
-the copy are open.
+`RAWCLICStockAndFlow` is pointed at `data/consolidated/` through
+`params.materials.traction_composition_dir` and reads the workbook where it
+lies, exactly as it reads `RAWCLICVehicleBattery/data/consolidated`. **It keeps
+no copy** -- traction motor information lives in this project and nowhere else.
 
-### The sources
+### Where a source lives, and why there are two places
 
-Declared in `data.sources` in `src/params_schema.py` -- **adding a source is a
-declaration, not a code change** -- and the files themselves live under
-`documentation/TractionMotor/`. `role` is a gate enforced in code: `load()`
-refuses a verification source. The base is the Zenodo consolidated dataset;
-what each source may do, and which two of them are not independent, is
-`HANDOVER.md` §2.
+**A file this code opens is in `data/raw/`.** Today that is the Zenodo
+consolidated workbook and the EV Database fleet snapshot, and nothing else.
+`documentation/` holds what is read by a person and transcribed -- the Drexler
+paper, the practical and comprehensive reports, the critical review. The
+Drexler PDF is declared in the registry and never opened, which is the whole
+distinction: its numbers reached the code through a person.
+
+Sources are declared in `data.sources` in `src/params_schema.py` -- **adding a
+source is a declaration, not a code change**. `role` is a gate enforced in
+code: `load()` refuses a verification source. The base is the Zenodo
+consolidated dataset; what each source may do, and which two of them are not
+independent, is `HANDOVER.md` §2.
 
 ### The smoke test
 

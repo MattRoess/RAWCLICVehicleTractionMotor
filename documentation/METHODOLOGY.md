@@ -46,7 +46,7 @@ architecture at two voltages is two compositions.
 
 ### Tier 1 — the consolidated dataset
 
-`documentation/TractionMotor/Zenodo/RAWCLIC_BEV_motor_consolidated_data_V1.xlsx`,
+`data/raw/RAWCLIC_BEV_motor_consolidated_data_V1.xlsx`,
 264 rows in the RAWCLIC 43-column house schema, with `dataProcessor`, `DOI` and
 the four DQ columns.
 

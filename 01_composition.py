@@ -10,7 +10,13 @@ established, and writes the traction-motor composition dataset.
     read -> audit -> verify the stator reading -> correct -> audit again
                   -> write the dataset
 
-WHAT IT WRITES, into `output.data_dir`:
+WHAT IT WRITES. Into `output.consolidated_dir`, which is the entire interface
+to the stock-and-flow model and holds nothing else:
+
+    TractionMotor_for_stockandflow.xlsx   what 04_03_tractionmotors.py reads
+    TractionMotor_for_stockandflow.csv    the same, for anything reading text
+
+and into `output.data_dir`, for this project's own use:
 
     TractionMotor_composition.xlsx   the dataset, in the RAWCLIC house schema,
                                      with this project's own quality columns
@@ -219,6 +225,7 @@ def main() -> int:
 
     _rule('Written')
     os.makedirs(params.output.data_dir, exist_ok=True)
+    os.makedirs(params.output.consolidated_dir, exist_ok=True)
     os.makedirs(params.output.figures_dir, exist_ok=True)
     out = os.path.join(params.output.data_dir, STEM)
 
@@ -233,16 +240,19 @@ def main() -> int:
     series.to_csv(f'{out}_trajectory.csv', index=False)
     grid.to_csv(f'{out}_by_torque.csv', index=False)
 
-    # THE FILE THE STOCK-AND-FLOW MODEL READS. Sheet name follows the house
-    # convention that 04_03 has used so far, so a rewritten consumer can keep
-    # it or not without this project having to guess.
-    export_path = os.path.join(params.output.data_dir,
+    # THE FILE THE STOCK-AND-FLOW MODEL READS, and the only thing in
+    # `consolidated_dir` -- that folder is the whole interface to the other
+    # repository, which reads it where it lies rather than keeping a copy.
+    # Sheet name follows the house convention that 04_03 has used so far, so a
+    # rewritten consumer can keep it or not without this project having to
+    # guess.
+    export_path = os.path.join(params.output.consolidated_dir,
                                'TractionMotor_for_stockandflow.xlsx')
     with pd.ExcelWriter(export_path, engine='openpyxl') as writer:
         export.to_excel(writer, sheet_name='Consolidated data', index=False)
         declared().to_excel(writer, sheet_name='corrections', index=False)
         after.to_excel(writer, sheet_name='findings', index=False)
-    export.to_csv(os.path.join(params.output.data_dir,
+    export.to_csv(os.path.join(params.output.consolidated_dir,
                                'TractionMotor_for_stockandflow.csv'), index=False)
     with pd.ExcelWriter(f'{out}.xlsx', engine='openpyxl') as writer:
         current_year.to_excel(writer, sheet_name='composition_current',

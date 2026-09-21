@@ -272,7 +272,7 @@ audit still reports it, and it is the one blocking finding left.
 
 ### The fleet itself, and what it says about the torque ranges
 
-`data/EV_details.csv` — **1438 battery-electric models** from the EV Database
+`data/raw/EV_details.csv` — **1438 battery-electric models** from the EV Database
 with total power, total torque, drive layout, segment, battery voltage, kerb
 mass and market-entry dates.
 
