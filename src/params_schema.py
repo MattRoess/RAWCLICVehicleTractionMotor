@@ -335,6 +335,31 @@ class DataParams:
     # `Co` climbs with the grade class in the workbook alongside Dy.
     magnet_curie_temperature: int = 320
 
+    # ⚠️ THE WORKBOOK'S `Nd` COLUMN IS DIDYMIUM: Nd AND Pr TOGETHER.
+    #
+    # Matthias 2026-09-21: "Nd and Pr are didymium, use the 29-32% for both
+    # together." So the 0.29-0.32 in every row of PermanentMagnetNdFeB is the
+    # rare-earth fraction, not the neodymium alone, and it is split here.
+    #
+    # ⚠️ THE WORKBOOK'S SEPARATE `Pr` COLUMN IS THEN NOT USED, and that is the
+    # point of writing this down. Its 0-0.01 is an impurity specification; adding
+    # it on top of a didymium total would count praseodymium twice, at a tenth
+    # of its real size. Before this, the model reported Pr at 0.005 of magnet
+    # mass -- about ten times too little, because it was reading an impurity
+    # limit as a constituent.
+    #
+    # WHY THIS SPLIT. Praseodymium is not refined out of neodymium for magnet
+    # use: didymium is reduced and alloyed as it comes, which is why NdPr oxide
+    # is what trades. The share is taken from the received reports' own element
+    # table -- Nd 0.25|0.38|0.55 kg and Pr 0.03|0.08|0.15 kg in one 150 kW motor
+    # -- which gives Pr as 0.107|0.174|0.214 of the two. That brackets the
+    # commercial 80:20 and 75:25 didymium grades from below, so it is the
+    # conservative end of the convention rather than an invention.
+    #
+    # Drawn uniformly between the ends, per draw, like the rest of the chemistry.
+    # SAFE TO CHANGE: yes -- a supplier's actual NdPr ratio beats this.
+    praseodymium_share_of_didymium: tuple[float, float] = (0.107, 0.214)
+
     # ---- convenience, so no stage reaches into the registry by hand ----
 
     @property

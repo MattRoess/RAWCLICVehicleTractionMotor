@@ -253,13 +253,14 @@ almost its whole range is extrapolation below the one machine that exists.
    copper, aluminium and steel can have an element layer the same way. Only the
    magnet was asked for.
 
-   ⚠️ **And praseodymium is unresolved.** The workbook gives Pr 0–0.01 of magnet
-   mass, which is an impurity specification. The received reports give Pr
-   0.03–0.15 kg in a 150 kW motor whose magnet is 1.5 kg — 2 to 10 % — because
-   commercial NdFeB is made from NdPr didymium, where Pr is a fifth to a quarter
-   of the rare earth and not a trace. The model currently reports the workbook's
-   0.5 %, so **Pr is understated by roughly an order of magnitude** if the
-   didymium reading is right. Nd, Dy and Tb are unaffected.
+   **Praseodymium: settled 2026-09-21.** Matthias: Nd and Pr are didymium, and
+   the workbook's 0.29–0.32 is the two together. So that column is drawn once as
+   didymium and split, Pr taking 0.107–0.214 of it from the received reports' own
+   element table, and the workbook's separate `Pr` column — an impurity limit of
+   0–0.01 — is **not** added on top. Nd 0.256, Pr 0.0490 of magnet mass, against
+   0.305 and 0.0050 before: praseodymium was understated tenfold while an
+   impurity limit was being read as a constituent. Iron's reconciliation improved
+   with it, 98.3 % → 99.5 % inside the cobalt-adjusted band.
 3. **Rotor `c-p` blank in all 26 rows**; derivable by summing, but that is a
    decision. **Cooling mass blank in all 26** and not derivable from anything.
 4. **Topology differences may be understated.** At 500 Nm the data puts the IM

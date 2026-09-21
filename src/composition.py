@@ -2402,7 +2402,13 @@ def magnet_element_draws(params: Params, motor: str,
     if band.empty:
         raise ValueError(f'no {klass} grades in the element workbook')
 
-    others = [element for element in MAGNET_ELEMENTS if element != MAGNET_BALANCE]
+    # `Nd` in the workbook is DIDYMIUM -- Nd and Pr together, Matthias
+    # 2026-09-21 -- so it is drawn once and split, and the workbook's own `Pr`
+    # column is left out rather than added on top of it. See
+    # `data.praseodymium_share_of_didymium` for why, and for what the old
+    # reading cost.
+    others = [element for element in MAGNET_ELEMENTS
+              if element not in (MAGNET_BALANCE, 'Pr')]
     rng = np.random.default_rng(params.monte_carlo.seed + 7919)
     drawn = np.empty((draws, len(MAGNET_ELEMENTS)), dtype=np.float64)
     names = list(MAGNET_ELEMENTS)
@@ -2413,8 +2419,18 @@ def magnet_element_draws(params: Params, motor: str,
         drawn[:, column] = (np.full(draws, low) if high <= low
                             else rng.uniform(low, high, draws))
 
+    # Split the didymium. The `Nd` column held both; after this it holds
+    # neodymium only and `Pr` holds the praseodymium that was inside it.
+    didymium = drawn[:, names.index('Nd')].copy()
+    share_low, share_high = params.data.praseodymium_share_of_didymium
+    praseodymium_share = rng.uniform(share_low, share_high, draws)
+    drawn[:, names.index('Pr')] = didymium * praseodymium_share
+    drawn[:, names.index('Nd')] = didymium * (1.0 - praseodymium_share)
+
     balance_column = names.index(MAGNET_BALANCE)
-    drawn[:, balance_column] = 1.0 - drawn[:, [names.index(e) for e in others]].sum(axis=1)
+    non_balance = [names.index(e) for e in MAGNET_ELEMENTS
+                   if e != MAGNET_BALANCE]
+    drawn[:, balance_column] = 1.0 - drawn[:, non_balance].sum(axis=1)
     return names, drawn
 
 
