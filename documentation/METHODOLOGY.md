@@ -590,6 +590,7 @@ Tb raise. If a different quantity was meant, this section changes.
 | 2026-09-18 | Years 2010–2070 built from a steady, modest material-efficiency improvement |
 | 2026-09-18 | **Zenodo is a historic anchor, not the forward basis** — it describes the 2020 fleet, and read forward it would deny the change this project models |
 | 2026-09-18 | Each source carries a `covers` window; one vintage means one year. 2 of 13 modelled years are measured, and 2010/2015 are a backcast, not a reading |
+| 2026-09-24 | **The element layer is for the MAGNET only.** Copper, aluminium and both steels stay materials — that is where the supply question lives, and it is a boundary rather than a gap |
 | 2026-09-18 | Composition is a function of TORQUE, not of segment — segments fit the relationship and are dropped |
 | 2026-09-18 | Masses are per VEHICLE (all its motors), not per motor; the categories are drive configurations |
 | 2026-09-18 | Torque grid stops at 1200 Nm because above it the per-motor arithmetic breaks, not because vehicles are rare |

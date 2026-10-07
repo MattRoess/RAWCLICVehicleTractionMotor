@@ -3324,7 +3324,8 @@ SEGMENT_KEYS = ['productKeyLevel1', 'productKeyLevel2', 'productKeyLevel3']
 
 
 def export_stock_and_flow(grid: pd.DataFrame, corrected: pd.DataFrame,
-                          params: Params) -> pd.DataFrame:
+                          params: Params,
+                          draws_out: dict | None = None) -> pd.DataFrame:
     """
     The composition file for `RAWCLICStockAndFlow/code/04_03_tractionmotors.py`.
 
@@ -3340,6 +3341,22 @@ def export_stock_and_flow(grid: pd.DataFrame, corrected: pd.DataFrame,
     Nothing is lost: `torque_nm` says which point on the curve produced each
     row, and `TractionMotor_composition_by_torque.csv` remains the
     torque-resolved form for anything that does have a torque.
+
+    ⚠️ THE PERCENTILES ARE DRAWN AT THIS SEGMENT'S TORQUE, NOT INTERPOLATED
+    BETWEEN PERCENTILES. Corrected 2026-09-24 after Matthias asked whether the
+    uncertainty was still being calculated properly anywhere.
+
+    It was not, here. The first version interpolated `meanValue`, `p025` and
+    `p975` separately along the torque grid and then derived `STD` from the
+    interval width assuming a normal shape. Both are the arithmetic §5 forbids:
+    a percentile of an interpolation is not the interpolation of percentiles,
+    and a mass distribution clipped at zero is not normal, so a sigma read off
+    its 95% width is wrong in the tail that matters.
+
+    With `draws_out` the 200 000 draws are interpolated INSTEAD -- linearly
+    between the two bracketing grid torques, per draw, which is exact because
+    the underlying fit is linear in torque between grid points -- and every
+    statistic is then taken from the resulting array.
 
     ⚠️ THE UNCERTAINTY TRAVELS. `p025`, `p975` and `STD` are carried per row,
     from the same 200,000-draw bootstrap, because the consumer is being
@@ -3360,6 +3377,7 @@ def export_stock_and_flow(grid: pd.DataFrame, corrected: pd.DataFrame,
                       for segment, (low, high, _) in ranges.items()}
 
     rows = []
+    cache: dict = {}
     for _, key in keys.iterrows():
         segment = key.productKeyLevel3
         torque = segment_torque.get(segment)
@@ -3374,17 +3392,47 @@ def export_stock_and_flow(grid: pd.DataFrame, corrected: pd.DataFrame,
                              'materialKeyLevel1', 'materialClass'],
                             dropna=False):
                         curve = line.sort_values('torque_nm')
-                        def at(column):
-                            values = curve[column].values
-                            if np.all(np.isnan(values)):
-                                return np.nan
-                            return float(np.interp(torque, curve.torque_nm.values,
-                                                   values))
-                        mean = at('meanValue')
+                        component, sub, material_key, klass = material
+
+                        # ⚠️ THE PERCENTILES ARE COMPUTED ONCE PER DISTRIBUTION
+                        # AND SCALED, NOT RECOMPUTED PER ROW. There are about
+                        # 440 distinct (key, torque) distributions behind
+                        # 62 403 rows, and the year and voltage factors are
+                        # positive scalars. For a positive scalar,
+                        # percentile(s*X) = s*percentile(X) exactly -- a
+                        # monotone transformation, not percentile arithmetic --
+                        # so the array is summarised once and multiplied.
+                        # Recomputing per row was correct and took minutes.
+                        stats = _drawn_stats(
+                            draws_out, (motor, component, sub, klass),
+                            torque, curve, cache)
+                        if stats is not None:
+                            base_mean = float(np.interp(
+                                torque, curve.torque_nm.values,
+                                curve.meanValue.values))
+                            raw_mean, raw_low, raw_high, raw_std = stats
+                            scale = (base_mean / raw_mean) if raw_mean else 0.0
+                            mean = raw_mean * scale
+                            low, high = raw_low * scale, raw_high * scale
+                            std = raw_std * scale
+                            drawn = True
+                        else:
+                            drawn = None
+                            # No draws for this row -- the spec machines'
+                            # element rows, say. Fall back to interpolating the
+                            # reported values and SAY SO in the column below,
+                            # rather than presenting it as drawn.
+                            def at(column):
+                                values = curve[column].values
+                                if np.all(np.isnan(values)):
+                                    return np.nan
+                                return float(np.interp(
+                                    torque, curve.torque_nm.values, values))
+                            mean, low, high = (at('meanValue'), at('p025'),
+                                               at('p975'))
+                            std = np.nan
                         if not np.isfinite(mean):
                             continue
-                        component, sub, material_key, klass = material
-                        low, high = at('p025'), at('p975')
                         rows.append({
                             'productKeyLevel1': key.productKeyLevel1,
                             'productKeyLevel2': key.productKeyLevel2,
@@ -3407,9 +3455,14 @@ def export_stock_and_flow(grid: pd.DataFrame, corrected: pd.DataFrame,
                             'meanValue': mean,
                             'value': mean,          # the old reader's name
                             'p025': low, 'p975': high,
-                            'STD': ((high - low) / (2 * 1.959963984540054)
-                                    if np.isfinite(low) and np.isfinite(high)
-                                    else np.nan),
+                            'STD': std,
+                            # ⚠️ SAYS WHERE THE INTERVAL CAME FROM. 'drawn'
+                            # means percentiles of 200 000 values at this
+                            # torque; 'interpolated' means the reported
+                            # percentiles were interpolated, which is weaker
+                            # and must not be mistaken for the first.
+                            'uncertaintyBasis': ('drawn' if drawn is not None
+                                                 else 'interpolated'),
                             'yearBasis': at_year.yearBasis.iloc[0],
                             'nSegments': int(line.n_segments.iloc[0]),
                             'slopeBorrowed': bool(line.get(
@@ -3421,6 +3474,65 @@ def export_stock_and_flow(grid: pd.DataFrame, corrected: pd.DataFrame,
                                            else 'spec'),
                         })
     return pd.DataFrame(rows)
+
+
+def _drawn_stats(draws_out: dict | None, key: tuple, torque: float,
+                 curve: pd.DataFrame, cache: dict):
+    """
+    Mean, 2.5th, 97.5th and sd of the 200 000 draws at one torque.
+
+    The draws are interpolated PER DRAW between the two bracketing grid
+    torques -- exact, because the underlying fit is linear in torque between
+    grid points -- and summarised once. Cached on (key, torque), because the
+    same distribution serves every year and voltage class through a scalar.
+    """
+    if not draws_out:
+        return None
+    memo = cache.get((key, torque))
+    if memo is not None:
+        return memo
+
+    array = draws_out.get(key)
+    if array is None:
+        # ⚠️ NaN IS NOT None IN A DICT KEY. The spec machines store their
+        # draws under (motor, None, None, material) because a data sheet names
+        # no component, while pandas' groupby hands back NaN for the same
+        # empty cell. The lookup missed every one of them and 20 130 rows --
+        # both spec machines, a third of the file -- silently fell back to
+        # interpolating percentiles, which is the very thing this function
+        # exists to stop.
+        #
+        # ⚠️ NOTHING IS RESCALED HERE. This rewrites the LOOKUP KEY only --
+        # two spellings of "empty" made to match -- and touches no mass, no
+        # draw and no percentile. Unlike the renormalisation of the spec
+        # shares, or the didymium split, both of which do change numbers.
+        same_key_empty_spelled_differently = tuple(
+            None if (isinstance(part, float) and np.isnan(part)) else part
+            for part in key)
+        array = draws_out.get(same_key_empty_spelled_differently)
+    if array is None:
+        return None
+    grid = np.asarray(curve.torque_nm.values, dtype=float)
+    if array.shape[1] != len(grid):
+        return None
+
+    if torque <= grid[0]:
+        values = array[:, 0].astype(np.float64)
+    elif torque >= grid[-1]:
+        values = array[:, -1].astype(np.float64)
+    else:
+        upper = int(np.searchsorted(grid, torque))
+        lower = upper - 1
+        span = grid[upper] - grid[lower]
+        weight = (torque - grid[lower]) / span if span else 0.0
+        values = (array[:, lower] * (1.0 - weight)
+                  + array[:, upper] * weight).astype(np.float64)
+
+    low, high = np.percentile(values, [2.5, 97.5])
+    memo = (float(values.mean()), float(low), float(high),
+            float(values.std(ddof=1)))
+    cache[(key, torque)] = memo
+    return memo
 
 
 def _material_level0(klass: str) -> str:

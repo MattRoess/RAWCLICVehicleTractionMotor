@@ -220,7 +220,8 @@ def main() -> int:
               f'{row.max_abs_error_kg:>8.2f}{row.r2:>7.3f}')
 
     _rule('Stock-and-flow export')
-    export = export_stock_and_flow(grid, corrected, params)
+    export = export_stock_and_flow(grid, corrected, params,
+                                   draws_out=draws_out)
     print(f'  {len(export)} rows   '
           f'{export.productKeyLevel3.nunique()} segments x '
           f'{export.componentKeyLevel1.nunique()} motor types x '

@@ -33,9 +33,23 @@ VENV_PYTHON = os.path.join(ROOT, '.venv', 'bin', 'python')
 
 
 def ensure_venv() -> None:
-    """Re-exec under `./.venv/bin/python` unless that is already running."""
+    """
+    Run under this project's interpreter, from this project's directory.
+
+    ⚠️ IT ALSO CHANGES THE WORKING DIRECTORY, and that is not tidiness. Every
+    path in `params_schema.py` is written from the project root --
+    `data/raw/...`, `documentation/...` -- so a stage started from anywhere
+    else fails on four settings at once with "which is not a file", which
+    reads like the files are missing when they are simply being looked for in
+    the wrong place. Positron and a terminal in another folder both do this.
+
+    Anchored on this file's own location, so it is right however the stage was
+    started.
+    """
     if ROOT not in sys.path:
         sys.path.insert(0, ROOT)
+    if os.path.abspath(os.getcwd()) != ROOT:
+        os.chdir(ROOT)
 
     if os.path.abspath(sys.executable) == os.path.abspath(VENV_PYTHON):
         return

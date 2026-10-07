@@ -1,7 +1,7 @@
 # Handover — RAWCLIC traction motor composition
 
-**2026-09-18.** What this project is, what it stands on, what was corrected,
-and what is still open.
+**Written 2026-09-18, current as of 2026-09-24.** What this project is, what it
+stands on, what was corrected, and what is still open.
 
 **2026-10-07: every Python file carries the copyright notice, and the repository is licensed
 CC BY 4.0.** `**Copyright notice:** Copyright © 2026 Empa, Matthias Roesslein` is in the module
@@ -17,11 +17,23 @@ Commons licence cannot be withdrawn for copies already made.
 
 Produces the **material composition of BEV traction motors** for the
 stock-and-flow model: give it a **motor type, a torque, a voltage class and a
-year**, get kilograms per vehicle by material.
+year**, get kilograms per vehicle by material — and, for the magnet, by
+element.
 
 ```bash
 ./.venv/bin/python 01_composition.py
 ```
+
+**It runs from anywhere.** Every path in `params_schema.py` is written from the
+project root, so `ensure_venv()` anchors the working directory there before
+anything else. Started from another folder it used to fail on four settings at
+once with "which is not a file", which reads like the data has gone missing
+when it is only being looked for in the wrong place.
+
+⚠️ **If it still misbehaves, restart the Positron session.** Positron keeps one
+long-lived interpreter: after an edit under `src/` the old module objects stay
+in `sys.modules` and you run the previous version. The bootstrap fixes which
+interpreter and where, never which session.
 
 **One stage, one module.** `01_composition.py` reads, audits, verifies,
 corrects and writes in one run. `src/composition.py` holds the benchmark, the
@@ -56,9 +68,16 @@ traction motor information is in this project and nowhere else.
 
 | file | |
 |---|---|
-| `TractionMotor_for_stockandflow.xlsx` | what `04_03_tractionmotors.py` reads, 13 299 rows |
+| `TractionMotor_for_stockandflow.xlsx` | what `04_03_tractionmotors.py` reads. **62 403 rows** on `Consolidated data`, **132** on `Magnet elements` |
 | `TractionMotor_for_stockandflow.csv` | the same, for anything reading text |
-| `draws/` | **the 200 000 simulations themselves**, 31 arrays, 298 MB |
+| `draws/` | **the 200 000 simulations themselves**, 47 arrays, 439 MB |
+
+⚠️ **The row count is 62 403 and not 13 299 because the years went annual.**
+Until 2026-09-21 the grid was every fifth year; the stock-and-flow model works
+on cohorts and wanted every one. `04_03_tractionmotors.py` reads the year
+rather than manufacturing it, and its own docstring now names that number — the
+two sides agree on 62 403 rows over 61 years, and a mismatch there is the first
+thing to check if it ever breaks.
 
 ### The draws, because a .csv is not a distribution
 
@@ -92,14 +111,39 @@ three radial types are unchanged to the last bit; the spec means move under
 
 ### And into `data/composition/`, for this project's own use
 
-| file | |
-|---|---|
-| `TractionMotor_composition_by_torque.csv` | **the deliverable.** 14 508 rows, no segment dimension |
-| `TractionMotor_composition_trajectory.csv` | same by segment, 13 338 rows |
-| `TractionMotor_composition.xlsx` | current composition, 8 sheets, house schema |
-| `composition_audit.csv` | every finding, before and after correction |
+| file | rows | |
+|---|---|---|
+| `TractionMotor_composition_by_torque.csv` | 68 076 | **the material deliverable**, no segment dimension |
+| `TractionMotor_composition_trajectory.csv` | 62 586 | the same by segment |
+| `TractionMotor_composition.xlsx` | 1 026 | current composition, 8 sheets, house schema |
+| `TractionMotor_element_mass_by_torque.csv` | 289 872 | **the element deliverable** — kg of each element, per grade scenario |
+| `TractionMotor_magnet_elements.csv` | 132 | the `e-m` shares themselves, per grade scenario |
+| `TractionMotor_heavy_rare_earth_scenarios.csv` | 288 | Dy and Tb across the three grades |
+| `TractionMotor_element_checks.csv` | 12 | the reconciliation, drawn against stated |
+| `composition_audit.csv` | | every finding, before and after correction |
 
-Plus seven figures in `figures/`.
+Plus **nine** figures in `figures/`, the last two being `08_distributions.png`
+and `09_magnet_grade_scenarios.png`.
+
+### The magnet's elements, and the three grades
+
+The magnet is the only material with an element layer — §7 says why the other
+four do not have one yet. Eleven elements, drawn per draw from
+`10_MaterialElementDefinitions.xlsx`, with the grade class set by
+`run.magnet_grade`.
+
+**The grade is the §4.2 mechanism made numerical.** A hotter magnet needs more
+heavy rare earth to hold its coercivity, so the grade class *is* the
+Dy/Tb content:
+
+| scenario | Dy | Tb | |
+|---|---|---|---|
+| **SH** | 5.5 % | 0.25 % | **base**, 150 °C, radial |
+| UH | 7.5 % | 0.50 % | |
+| EH | 9.0 % | 0.50 % | hottest, most heavy rare earth |
+
+Nd is 25.6 % and Pr 4.9 % of magnet mass in the base scenario — see §7 on why
+those two are drawn together as didymium and then split.
 
 ### The deliverable's dimensions
 
@@ -108,8 +152,10 @@ Plus seven figures in `figures/`.
 | motor types | **5** — PMSM, EESM, IM+PM, axial flux, dual-rotor radial |
 | voltage | 400 / 800 / 1000 V |
 | torque | 100–1200 Nm, every 100 |
-| years | 2010–2070, every 5 |
+| years | **2010–2070, every one — 61 years** |
 | materials | lamination, copper, magnet, steel, aluminium |
+| magnet elements | Nd, Fe, B, Dy, Tb, Pr, Co, Al, Cu, Nb, Ga |
+| grade scenarios | **SH (base), UH, EH** |
 
 Every row carries `meanValue`, `p025`, `p975`, `yearBasis`, `n_segments`,
 `extrapolated` and `slope_borrowed`.
@@ -248,6 +294,31 @@ almost its whole range is extrapolation below the one machine that exists.
 
 ## 7. Open
 
+0. **Every reported interval now comes from draws — checked 2026-09-24, and it
+   did not.** Matthias asked whether there was still an item about
+   uncertainties not being computed properly. There was, in the export.
+
+   It interpolated `meanValue`, `p025` and `p975` separately along the torque
+   grid and derived `STD` from the interval width assuming a normal shape.
+   Both are the arithmetic §5 forbids: a percentile of an interpolation is not
+   the interpolation of percentiles, and a mass distribution clipped at zero is
+   not normal. The drawn `STD` comes out **1–2 % from the normal-shape
+   formula**, so the old number was quietly wrong in the tail that matters.
+
+   The 200 000 draws are interpolated **per draw** instead, exactly, since the
+   fit is linear in torque between grid points. Summarised once per distinct
+   distribution and scaled: for a positive scalar `percentile(s·X) =
+   s·percentile(X)`, a monotone transformation rather than percentile
+   arithmetic. That matters practically — recomputing per row was correct and
+   took minutes.
+
+   ⚠️ **And the first fix silently missed a third of the file.** The spec
+   machines key their draws on `None` where pandas' groupby yields `NaN`, so
+   20 130 rows fell back to interpolation without complaint. Every row now
+   carries **`uncertaintyBasis`**, and the whole file reads `drawn` —
+   62 403 of 62 403. A fallback that cannot be seen is a fallback that becomes
+   permanent.
+
 1. **`zero-interval` is still blocking** — C3's mass is marked, not fixed.
 2. ~~**No element layer.**~~ **CLOSED FOR THE MAGNET, 2026-09-21.** Matthias's
    `10_MaterialElementDefinitions.xlsx` supplies 28 sintered NdFeB grades as
@@ -256,10 +327,18 @@ almost its whole range is extrapolation below the one machine that exists.
    mass draws. The grade class comes from `run.magnet_grade` — SH radial, H
    axial flux, on the oil-cooling argument of §4.3.
 
-   **Still open for the other four materials.** The same workbook has
-   `ElectricalSteel`, `Copper`, `CastAl` and `CastFeSteel`, so lamination,
-   copper, aluminium and steel can have an element layer the same way. Only the
-   magnet was asked for.
+   **And the other four stay materials — decided 2026-09-24, not an omission.**
+   Matthias: copper, aluminium and both steels stay as materials. The element
+   layer exists for the magnet because that is where the supply question lives:
+   Nd, Pr, Dy and Tb are the critical elements, and the grade decides how much
+   heavy rare earth a motor carries. Copper is copper, and what a recovery
+   route gets back from a lamination stack is electrical steel, not iron and
+   silicon separately.
+
+   `10_MaterialElementDefinitions.xlsx` does carry `ElectricalSteel`, `Copper`,
+   `CastAl` and `CastFeSteel`, so the layer could be built the same way if a
+   question ever needs it. **It is not needed, so it is not built** — this is
+   the boundary, not a gap in it.
 
    **Praseodymium: settled 2026-09-21.** Matthias: Nd and Pr are didymium, and
    the workbook's 0.29–0.32 is the two together. So that column is drawn once as
