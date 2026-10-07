@@ -2,6 +2,8 @@
 src/params_schema.py
 ====================
 
+**Copyright notice:** Copyright © 2026 Empa, Matthias Roesslein
+
 **EVERY SETTING FOR THIS PROJECT IS IN THIS FILE.** Open it, change a value,
 press Run on `00_parameters.py`, then on the stages in order. Nothing is
 passed on a command line: none of the stages takes an argument, because a

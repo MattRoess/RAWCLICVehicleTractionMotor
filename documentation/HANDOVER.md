@@ -3,6 +3,14 @@
 **2026-09-18.** What this project is, what it stands on, what was corrected,
 and what is still open.
 
+**2026-10-07: every Python file carries the copyright notice, and the repository is licensed
+CC BY 4.0.** `**Copyright notice:** Copyright © 2026 Empa, Matthias Roesslein` is in the module
+docstring of all 8 Python files, after the title block (in the empty `src/__init__.py` it is the
+docstring), and **a new Python file must get it too**. `LICENSE` holds the official text, and the
+README says what it covers: the code and the documentation written here, not the documents received
+from others under `documentation/TractionMotor/` and not the data the project reads. A Creative
+Commons licence cannot be withdrawn for copies already made.
+
 ---
 
 ## 1. What it does

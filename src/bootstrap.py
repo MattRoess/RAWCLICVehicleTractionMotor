@@ -2,6 +2,8 @@
 src/bootstrap.py
 ================
 
+**Copyright notice:** Copyright © 2026 Empa, Matthias Roesslein
+
 Run under this project's own interpreter, whatever was used to start the file.
 
 WHY THIS EXISTS. The stages are started by pressing Run in Positron, and

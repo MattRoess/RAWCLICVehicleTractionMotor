@@ -2,6 +2,8 @@
 src/composition.py
 ==================
 
+**Copyright notice:** Copyright © 2026 Empa, Matthias Roesslein
+
 Everything between the source workbooks and the composition dataset: the
 benchmark, the audit, the corrections and the draws, in one file.
 

@@ -2,6 +2,8 @@
 01_composition.py
 =================
 
+**Copyright notice:** Copyright © 2026 Empa, Matthias Roesslein
+
 **THE ONE STAGE.** Reads the sources, checks them, corrects what is
 established, and writes the traction-motor composition dataset.
 

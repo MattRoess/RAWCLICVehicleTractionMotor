@@ -2,6 +2,8 @@
 00_check_environment.py
 =======================
 
+**Copyright notice:** Copyright © 2026 Empa, Matthias Roesslein
+
 Smoke test for a fresh checkout: proves the interpreter and the packages are
 where the rest of this project will expect them, and profiles whatever
 composition workbook is present.

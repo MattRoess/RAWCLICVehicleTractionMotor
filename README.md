@@ -128,3 +128,17 @@ Same rule as the sibling projects: `.gitignore` excludes every `.xlsx`, `.csv`,
 until the source documents are supplied separately -- iCloud, shared drive,
 however they are distributed -- and the deliverable is handed to the
 stock-and-flow model directly, not through GitHub.
+
+## Licence
+
+The code and the documentation written for this repository are licensed under
+[Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/)
+(CC BY 4.0): you may share and adapt them, commercially too, as long as you give credit,
+link to the licence and say if you changed anything. The full text is in
+[LICENSE](LICENSE), and every Python file carries the notice
+`Copyright © 2026 Empa, Matthias Roesslein`.
+
+**Not covered by it:** the documents received from others and kept under
+`documentation/TractionMotor/` (the Drexler paper, the reports, the review and the Zenodo data
+description), and the data the project reads (the Zenodo consolidated dataset and the EV Database
+snapshot), which are not part of this repository. They stay under their owners' terms.
